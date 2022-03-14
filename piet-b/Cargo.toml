@@ -1,0 +1,10 @@
+[package]
+name = "piet-b"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy = { path = "../../clone/bevy", default-features = false, features = ["render", "bevy_winit", "x11"], version = "0.6.0" }
+piet = "0.5.0"
