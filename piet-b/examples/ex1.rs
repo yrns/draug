@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use piet::{Color, RenderContext};
+use piet::{Color, RenderContext, Text};
 use piet_b::{kurbo::Rect, *};
 
 fn main() {
@@ -25,4 +25,6 @@ fn setup(mut params: PietParams) {
 
     let mut piet = Piet::new(params);
     piet.fill(Rect::new(0.0, 0.0, 200.0, 100.0), &Color::PURPLE);
+    let _layout = piet.text().new_text_layout("Hello, piet.");
+    //piet.draw_text();
 }
