@@ -1,14 +1,24 @@
-use std::{cell::RefCell, rc::Rc};
-
 use bevy::{
     ecs::system::SystemParam,
-    prelude::*,
+    math::{Size, Vec2},
+    prelude::{
+        App, AssetServer, Assets, Bundle, CameraUi, Commands, GlobalTransform, Image, Plugin,
+        Query, Res, ResMut, TextureAtlas, Transform, Visibility,
+    },
     render::camera::CameraTypePlugin,
-    text::{DefaultTextPipeline, FontAtlasSet},
-    ui::UiImage,
+    text::{
+        DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, TextAlignment, TextError,
+        TextSection, TextStyle, VerticalAlign,
+    },
+    ui::{Node, UiColor, UiImage},
+    window::Windows,
 };
+use piet::TextAttribute;
+use std::{cell::RefCell, rc::Rc};
+
+// Piet is reexported; all collisions are prefixed/aliased.
 pub use piet::kurbo;
-use piet::{RenderContext, TextAttribute};
+pub use piet::*;
 
 pub type NodesQuery<'w, 's> = Query<
     'w,
@@ -68,9 +78,9 @@ impl<'w, 's> Piet<'w, 's> {
     }
 }
 
-fn convert_color(color: piet::Color) -> Color {
+fn convert_color(color: piet::Color) -> bevy::prelude::Color {
     let (r, g, b, a) = color.as_rgba8();
-    Color::rgba_u8(r, g, b, a)
+    bevy::prelude::Color::rgba_u8(r, g, b, a)
 }
 
 fn convert_alignment(alignment: piet::TextAlignment) -> TextAlignment {
@@ -92,7 +102,7 @@ fn convert_alignment(alignment: piet::TextAlignment) -> TextAlignment {
     }
 }
 
-impl<'w, 's> RenderContext for Piet<'w, 's> {
+impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     type Brush = Brush;
     type Text = PietText<'w, 's>;
     type TextLayout = PietTextLayout;
@@ -408,7 +418,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
 
     // From text_system:
     fn build(self) -> Result<Self::Out, piet::Error> {
-        // TODO:
+        // TODO: via druid?
         let scale_factor = 1.0;
 
         let node_size = Size::new(self.max_width as f32, f32::MAX);
@@ -420,11 +430,14 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
 
         // make one text section until we do attributes
         let alignment = convert_alignment(self.alignment);
-        let text = Text {
+        let text = bevy::text::Text {
             sections: vec![TextSection {
                 value: self.text.clone(),
                 style: TextStyle {
-                    font: self.params.asset_server.load(self.font.unwrap().name()),
+                    font: self
+                        .params
+                        .asset_server
+                        .load(self.font.expect("missing font name").name()),
                     font_size: self.size as f32,
                     color: convert_color(self.color),
                 },
@@ -432,13 +445,18 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
             alignment,
         };
 
+        // spawn and fail? FIX:
         let entity = self
             .params
             .commands
             .borrow_mut()
             .spawn_bundle(TextBundle {
+                node: Node {
+                    size: Vec2::new(200.0, 100.0).into(),
+                },
                 // fix extra clone?
                 text: text.clone(),
+                transform: Transform::from_xyz(100.0, 100.0, 0.0),
                 ..Default::default()
             })
             .id();
@@ -454,7 +472,6 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
             &mut texture_atlases,
             &mut textures,
         ) {
-            Err(e) => panic!("fatal error: {}", e),
             Ok(()) => {
                 // TODO: store line metrics, entity
                 let _text_layout_info = text_pipeline
@@ -463,6 +480,12 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
 
                 Ok(PietTextLayout {})
             }
+            Err(TextError::NoSuchFont) => {
+                // font asset not loaded yet - what if the asset fails
+                // to load?
+                Err(piet::Error::MissingFont)
+            }
+            Err(e) => Err(piet::Error::BackendError(e.into())),
         }
     }
 }
@@ -496,7 +519,7 @@ pub struct ImageBundle {}
 #[derive(Bundle, Clone, Debug, Default)]
 pub struct TextBundle {
     pub node: Node,
-    pub text: Text,
+    pub text: bevy::text::Text,
     pub transform: Transform,
     pub global_transform: GlobalTransform,
     pub visibility: Visibility,
