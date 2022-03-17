@@ -2,13 +2,13 @@ use bevy::{
     ecs::system::SystemParam,
     math::{Size, Vec2},
     prelude::{
-        App, AssetServer, Assets, Bundle, CameraUi, Commands, GlobalTransform, Image, Plugin,
-        Query, Res, ResMut, TextureAtlas, Transform, Visibility,
+        App, AssetServer, Assets, Bundle, CameraUi, Commands, Entity, GlobalTransform, Image,
+        Plugin, Query, Res, ResMut, TextureAtlas, Transform, Visibility,
     },
     render::camera::CameraTypePlugin,
     text::{
-        DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, TextAlignment, TextError,
-        TextSection, TextStyle, VerticalAlign,
+        DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextAlignment,
+        TextError, TextLayoutInfo, TextSection, TextStyle, VerticalAlign,
     },
     ui::{Node, UiColor, UiImage},
     window::Windows,
@@ -157,6 +157,7 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
                     size: Vec2::new(size.width as f32, size.height as f32),
                 },
                 color: UiColor(color),
+                transform: Transform::from_xyz(rect.x0 as f32, rect.y0 as f32, 0.0),
                 ..Default::default()
             });
         }
@@ -317,7 +318,7 @@ impl<'w, 's> piet::Text for PietText<'w, 's> {
 
     fn new_text_layout(&mut self, text: impl piet::TextStorage) -> Self::TextLayoutBuilder {
         Self::TextLayoutBuilder {
-            text: text.as_str().to_string(),
+            text: Rc::new(text),
             params: self.clone(),
             max_width: f64::MAX,
             alignment: piet::TextAlignment::Start,
@@ -331,13 +332,18 @@ impl<'w, 's> piet::Text for PietText<'w, 's> {
 // This struct persists inside widgets and needs to hold onto
 // everything it needs to fulfill the impl.
 #[derive(Clone)]
-pub struct PietTextLayout;
+pub struct PietTextLayout {
+    entity: Entity,
+    text: Rc<dyn piet::TextStorage>,
+    glyphs: Rc<Vec<PositionedGlyph>>,
+    size: kurbo::Size,
+}
 
 impl piet::TextLayout for PietTextLayout {
     fn size(&self) -> kurbo::Size {
         // this is CalculatedSize? it needs to include cursor height
         // for empty text
-        todo!()
+        self.size
     }
 
     fn trailing_whitespace_width(&self) -> f64 {
@@ -350,7 +356,7 @@ impl piet::TextLayout for PietTextLayout {
     }
 
     fn text(&self) -> &str {
-        todo!()
+        self.text.as_str()
     }
 
     fn line_text(&self, line_number: usize) -> Option<&str> {
@@ -376,7 +382,7 @@ impl piet::TextLayout for PietTextLayout {
 
 // TODO: split attributes into sections?
 pub struct PietTextLayoutBuilder<'w, 's> {
-    text: String,
+    text: Rc<dyn piet::TextStorage>,
     params: PietText<'w, 's>,
     max_width: f64,
     alignment: piet::TextAlignment,
@@ -432,7 +438,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
         let alignment = convert_alignment(self.alignment);
         let text = bevy::text::Text {
             sections: vec![TextSection {
-                value: self.text.clone(),
+                value: self.text.as_str().to_string(),
                 style: TextStyle {
                     font: self
                         .params
@@ -473,12 +479,19 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
             &mut textures,
         ) {
             Ok(()) => {
-                // TODO: store line metrics, entity
-                let _text_layout_info = text_pipeline
+                let text_layout_info = text_pipeline
                     .get_glyphs(&entity)
                     .expect("Failed to get glyphs from the pipeline that have just been computed");
 
-                Ok(PietTextLayout {})
+                let size = text_layout_info.size;
+                let size = kurbo::Size::new(size.width as f64, size.height as f64);
+
+                Ok(PietTextLayout {
+                    entity,
+                    text: self.text.clone(),
+                    glyphs: Rc::new(text_layout_info.glyphs.clone()),
+                    size,
+                })
             }
             Err(TextError::NoSuchFont) => {
                 // font asset not loaded yet - what if the asset fails

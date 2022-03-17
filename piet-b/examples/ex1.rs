@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use piet_b::{self as piet, kurbo, FontFamily, Piet, RenderContext, Text, TextLayoutBuilder};
+use piet_b::{
+    self as piet, kurbo, FontFamily, Piet, RenderContext, Text, TextLayout, TextLayoutBuilder,
+};
 
 fn main() {
     App::new()
@@ -25,23 +27,32 @@ fn setup(mut commands: Commands) {
     commands.spawn_bundle(UiCameraBundle::default());
 }
 
-fn draw(mut drawn: Local<bool>, mut params: piet::PietParams) {
+fn draw(mut drawn: Local<bool>, params: piet::PietParams) {
     if !*drawn {
+        let window = params.text_params.windows.primary();
+        let width = window.physical_width() as f64;
+        let height = window.physical_height() as f64;
+        let center = kurbo::Point::new(width * 0.5, height * 0.5);
+
         let mut piet = Piet::new(params);
-        let color = piet::Color::PURPLE;
         let family = FontFamily::new_unchecked("Vollkorn-Regular.ttf");
-        //piet.fill(kurbo::Rect::new(0.0, 0.0, 200.0, 100.0), &color);
         if let Ok(layout) = piet
             .text()
             .new_text_layout("Hello, piet.")
-            .font(family, 24.0)
+            .font(family, 64.0)
             .build()
         {
-            //piet.draw_text();
+            let size = layout.size();
+
+            piet.fill(
+                kurbo::Rect::from_center_size(center, size + kurbo::Size::new(20.0, 20.0)),
+                &piet::Color::WHITE,
+            );
+
+            //piet.draw_text(&layout, center - (size.width * 0.5, 0.0));
             *drawn = true;
-            dbg!("draw!");
         } else {
-            dbg!("loading?");
+            // font is still loading
         }
     }
 }
