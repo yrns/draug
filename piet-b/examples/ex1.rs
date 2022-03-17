@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, window::WindowResized};
 use piet_b::{
     self as piet, kurbo, FontFamily, Piet, RenderContext, Text, TextLayout, TextLayoutBuilder,
 };
@@ -9,6 +9,7 @@ fn main() {
         .add_plugin(bevy::log::LogPlugin::default())
         .add_plugin(bevy::core::CorePlugin::default())
         .add_plugin(bevy::transform::TransformPlugin::default())
+        .add_plugin(bevy::input::InputPlugin::default())
         .add_plugin(bevy::window::WindowPlugin::default())
         .add_plugin(bevy::asset::AssetPlugin::default())
         .add_plugin(bevy::winit::WinitPlugin::default())
@@ -27,11 +28,13 @@ fn setup(mut commands: Commands) {
     commands.spawn_bundle(UiCameraBundle::default());
 }
 
-fn draw(mut drawn: Local<bool>, params: piet::PietParams) {
-    if !*drawn {
+fn draw(mut drawn: Local<bool>, mut resized: EventReader<WindowResized>, params: piet::PietParams) {
+    let resized = resized.iter().next().is_some();
+
+    if !*drawn || resized {
         let window = params.text_params.windows.primary();
-        let width = window.physical_width() as f64;
-        let height = window.physical_height() as f64;
+        let width = window.width() as f64;
+        let height = window.height() as f64;
         let center = kurbo::Point::new(width * 0.5, height * 0.5);
 
         let mut piet = Piet::new(params);
@@ -43,13 +46,11 @@ fn draw(mut drawn: Local<bool>, params: piet::PietParams) {
             .build()
         {
             let size = layout.size();
+            let rect = kurbo::Rect::from_center_size(center, size);
 
-            piet.fill(
-                kurbo::Rect::from_center_size(center, size + kurbo::Size::new(20.0, 20.0)),
-                &piet::Color::WHITE,
-            );
+            piet.fill(rect, &piet::Color::WHITE);
 
-            //piet.draw_text(&layout, center - (size.width * 0.5, 0.0));
+            piet.draw_text(&layout, rect.origin());
             *drawn = true;
         } else {
             // font is still loading

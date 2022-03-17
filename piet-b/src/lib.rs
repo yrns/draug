@@ -152,14 +152,17 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
             let Brush::Solid(color) = brush;
             let color = convert_color(color);
             let size = rect.size();
+            let center = rect.center();
             self.commands.borrow_mut().spawn_bundle(NodeBundle {
                 node: Node {
                     size: Vec2::new(size.width as f32, size.height as f32),
                 },
                 color: UiColor(color),
-                transform: Transform::from_xyz(rect.x0 as f32, rect.y0 as f32, 0.0),
+                transform: Transform::from_xyz(center.x as f32, center.y as f32, 0.0),
                 ..Default::default()
             });
+        } else {
+            unimplemented!()
         }
     }
 
@@ -176,7 +179,17 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     }
 
     fn draw_text(&mut self, layout: &Self::TextLayout, pos: impl Into<kurbo::Point>) {
-        todo!()
+        let rect = kurbo::Rect::from_origin_size(pos.into(), layout.size);
+        let center = rect.center();
+        // There is no way to tell if get_or_spawn fails (if the
+        // entity is bad); we end up with a dangling transform?
+        self.commands
+            .borrow_mut()
+            .get_or_spawn(layout.entity)
+            .insert(Transform::from_xyz(center.x as f32, center.y as f32, 0.0))
+            .insert(Node {
+                size: Vec2::new(layout.size.width as f32, layout.size.height as f32),
+            });
     }
 
     fn save(&mut self) -> Result<(), piet::Error> {
@@ -457,12 +470,9 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
             .commands
             .borrow_mut()
             .spawn_bundle(TextBundle {
-                node: Node {
-                    size: Vec2::new(200.0, 100.0).into(),
-                },
                 // fix extra clone?
+                // we only need the section color for rendering
                 text: text.clone(),
-                transform: Transform::from_xyz(100.0, 100.0, 0.0),
                 ..Default::default()
             })
             .id();
