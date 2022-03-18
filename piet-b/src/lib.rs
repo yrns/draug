@@ -8,7 +8,7 @@ use bevy::{
     render::camera::CameraTypePlugin,
     text::{
         DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextAlignment,
-        TextError, TextLayoutInfo, TextSection, TextStyle, VerticalAlign,
+        TextError, TextSection, TextStyle, VerticalAlign,
     },
     ui::{Node, UiColor, UiImage},
     window::Windows,
@@ -346,11 +346,22 @@ impl<'w, 's> piet::Text for PietText<'w, 's> {
 // everything it needs to fulfill the impl.
 #[derive(Clone)]
 pub struct PietTextLayout {
-    entity: Entity,
-    text: Rc<dyn piet::TextStorage>,
-    glyphs: Rc<Vec<PositionedGlyph>>,
-    size: kurbo::Size,
+    pub entity: Entity,
+    pub text: Rc<dyn piet::TextStorage>,
+    // we don't need these anymore after generating line metrics?
+    pub glyphs: Rc<Vec<PositionedGlyph>>,
+    pub size: kurbo::Size,
 }
+
+pub fn glyph_rect(glyph: &PositionedGlyph) -> kurbo::Rect {
+    // the glyph position is the center
+    kurbo::Rect::from_center_size(
+        (glyph.position.x as f64, glyph.position.y as f64),
+        (glyph.size.x as f64, glyph.size.y as f64),
+    )
+}
+
+impl PietTextLayout {}
 
 impl piet::TextLayout for PietTextLayout {
     fn size(&self) -> kurbo::Size {
@@ -495,11 +506,12 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
 
                 let size = text_layout_info.size;
                 let size = kurbo::Size::new(size.width as f64, size.height as f64);
+                let glyphs = text_layout_info.glyphs.clone();
 
                 Ok(PietTextLayout {
                     entity,
                     text: self.text.clone(),
-                    glyphs: Rc::new(text_layout_info.glyphs.clone()),
+                    glyphs: Rc::new(glyphs),
                     size,
                 })
             }

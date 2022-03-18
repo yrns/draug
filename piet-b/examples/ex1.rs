@@ -1,11 +1,17 @@
 use bevy::{prelude::*, window::WindowResized};
+
 use piet_b::{
-    self as piet, kurbo, FontFamily, Piet, RenderContext, Text, TextLayout, TextLayoutBuilder,
+    self as piet, glyph_rect, kurbo, FontFamily, Piet, RenderContext, Text, TextLayout,
+    TextLayoutBuilder,
 };
 
 fn main() {
     App::new()
         //.add_plugins(DefaultPlugins)
+        .insert_resource(WindowDescriptor {
+            scale_factor_override: Some(1.0),
+            ..Default::default()
+        })
         .add_plugin(bevy::log::LogPlugin::default())
         .add_plugin(bevy::core::CorePlugin::default())
         .add_plugin(bevy::transform::TransformPlugin::default())
@@ -41,7 +47,7 @@ fn draw(mut drawn: Local<bool>, mut resized: EventReader<WindowResized>, params:
         let family = FontFamily::new_unchecked("Vollkorn-Regular.ttf");
         if let Ok(layout) = piet
             .text()
-            .new_text_layout("Hello, piet.")
+            .new_text_layout("Hello, piet. ")
             .font(family, 64.0)
             .build()
         {
@@ -49,6 +55,12 @@ fn draw(mut drawn: Local<bool>, mut resized: EventReader<WindowResized>, params:
             let rect = kurbo::Rect::from_center_size(center, size);
 
             piet.fill(rect, &piet::Color::WHITE);
+
+            let color = piet::Color::RED.with_alpha(0.3);
+            for glyph in layout.glyphs.iter() {
+                let glyph_rect = glyph_rect(glyph) + rect.origin().to_vec2();
+                piet.fill(glyph_rect, &color);
+            }
 
             piet.draw_text(&layout, rect.origin());
             *drawn = true;
