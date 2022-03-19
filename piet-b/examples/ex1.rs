@@ -47,7 +47,7 @@ fn draw(mut drawn: Local<bool>, mut resized: EventReader<WindowResized>, params:
         let family = FontFamily::new_unchecked("Vollkorn-Regular.ttf");
         if let Ok(layout) = piet
             .text()
-            .new_text_layout("Hello, piet. ")
+            .new_text_layout("Hello,\npiet. ")
             .font(family, 64.0)
             .build()
         {

@@ -13,6 +13,7 @@ use bevy::{
     ui::{Node, UiColor, UiImage},
     window::Windows,
 };
+use glyph_brush_layout::ab_glyph::{self, ScaleFont};
 use piet::TextAttribute;
 use std::{cell::RefCell, rc::Rc};
 
@@ -351,6 +352,8 @@ pub struct PietTextLayout {
     // we don't need these anymore after generating line metrics?
     pub glyphs: Rc<Vec<PositionedGlyph>>,
     pub size: kurbo::Size,
+    pub line_metrics: Rc<[piet::LineMetric]>,
+    //pub line_breaks: Rc<[]>,
 }
 
 pub fn glyph_rect(glyph: &PositionedGlyph) -> kurbo::Rect {
@@ -384,15 +387,18 @@ impl piet::TextLayout for PietTextLayout {
     }
 
     fn line_text(&self, line_number: usize) -> Option<&str> {
-        todo!()
+        self.line_metrics
+            .get(line_number)
+            .map(|m| &self.text[m.range()])
     }
 
     fn line_metric(&self, line_number: usize) -> Option<piet::LineMetric> {
-        todo!()
+        // TODO: if line_number == 0 && self.text.is_empty() {
+        self.line_metrics.get(line_number).cloned()
     }
 
     fn line_count(&self) -> usize {
-        todo!()
+        self.line_metrics.len()
     }
 
     fn hit_test_point(&self, point: kurbo::Point) -> piet::HitTestPoint {
@@ -508,11 +514,75 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                 let size = kurbo::Size::new(size.width as f64, size.height as f64);
                 let glyphs = text_layout_info.glyphs.clone();
 
+                // Unfortunately we don't have access to line metrics
+                // internal to glyph_brush_layout, so we have to
+                // recreate them here. They may be inaccurate. In
+                // addition, the lines heuristic may be inaccurate
+                // with respect to the internal line breaker.
+                let section_fonts = &text
+                    .sections
+                    .iter()
+                    .map(|s| {
+                        let TextStyle {
+                            font, font_size, ..
+                        } = &s.style;
+                        // fonts are already checked above
+                        (self.params.fonts.get(font.id).unwrap(), font_size)
+                    })
+                    //.unique() - probably dupes, but font_size isn't
+                    // hashable; we need to maintain section indices
+                    // as well
+                    .map(|(font, size)| ab_glyph::Font::as_scaled(&font.font, *size))
+                    .collect::<Vec<_>>();
+
+                let mut y_offset = 0.0;
+                let mut line_metrics = Vec::new();
+                for (start, end) in lines(&glyphs).into_iter() {
+                    let (ascent, _descent, height, line_gap) = &glyphs[start..end]
+                        .iter()
+                        .map(|g| {
+                            let f = section_fonts[g.section_index];
+                            (
+                                f.ascent() as f64,
+                                f.descent() as f64,
+                                f.height() as f64,
+                                f.line_gap() as f64,
+                            )
+                        })
+                        .reduce(|m1, m2| {
+                            (
+                                m1.0.max(m2.0),
+                                m1.1.max(m2.1),
+                                m1.2.max(m2.2),
+                                m1.3.max(m2.3),
+                            )
+                        })
+                        // FIX: a line could be empty of glyphs (only
+                        // whitespace) where this will fail
+                        .unwrap();
+                    // see: https://docs.rs/piet/latest/piet/struct.LineMetric.html
+                    line_metrics.push(piet::LineMetric {
+                        // These offsets only work because we only
+                        // have one section. FIX:
+                        start_offset: glyphs[start].byte_index,
+                        // This does not include trailing whitespace
+                        // since we're building off glyphs. FIX:
+                        end_offset: glyphs[end - 1].byte_index,
+                        // TODO:
+                        trailing_whitespace: 0,
+                        baseline: *ascent,
+                        height: *height,
+                        y_offset,
+                    });
+                    y_offset += *height + *line_gap;
+                }
+
                 Ok(PietTextLayout {
                     entity,
                     text: self.text.clone(),
                     glyphs: Rc::new(glyphs),
                     size,
+                    line_metrics: line_metrics.into(),
                 })
             }
             Err(TextError::NoSuchFont) => {
@@ -523,6 +593,29 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
             Err(e) => Err(piet::Error::BackendError(e.into())),
         }
     }
+}
+
+fn lines(glyphs: &Vec<PositionedGlyph>) -> Vec<(usize, usize)> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut last_x = -f32::INFINITY;
+
+    for (i, glyph) in glyphs.iter().enumerate() {
+        let x = glyph.position.x;
+        if x < last_x {
+            // new line
+            lines.push((start, i));
+            start = i;
+        }
+        last_x = x;
+    }
+
+    // last line
+    if lines.len() > 0 {
+        lines.push((start, glyphs.len()));
+    }
+
+    lines
 }
 
 #[derive(Clone)]
