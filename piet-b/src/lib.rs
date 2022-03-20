@@ -364,7 +364,21 @@ pub fn glyph_rect(glyph: &PositionedGlyph) -> kurbo::Rect {
     )
 }
 
-impl PietTextLayout {}
+impl PietTextLayout {
+    // Returns a slice of glyphs in the specified byte range. This
+    // assumes glyphs are sorted by byte_index.
+    fn glyph_range(&self, range: std::ops::Range<usize>) -> Option<&[PositionedGlyph]> {
+        self.glyphs
+            .iter()
+            .position(|g| g.byte_index >= range.start)
+            .and_then(|start| {
+                self.glyphs[start..]
+                    .iter()
+                    .rposition(|g| g.byte_index <= range.end)
+                    .map(|end| &self.glyphs[start..end])
+            })
+    }
+}
 
 impl piet::TextLayout for PietTextLayout {
     fn size(&self) -> kurbo::Size {
@@ -402,7 +416,24 @@ impl piet::TextLayout for PietTextLayout {
     }
 
     fn hit_test_point(&self, point: kurbo::Point) -> piet::HitTestPoint {
-        todo!()
+        self.line_metrics
+            .iter()
+            .find(|l| point.y <= (l.y_offset + l.height))
+            .or_else(|| self.line_metrics.last())
+            .and_then(|l| self.glyph_range(l.range()))
+            .and_then(|gs| {
+                if let Some(g) = gs.iter().find(|g| glyph_rect(g).contains(point)) {
+                    Some(piet::HitTestPoint::new(g.byte_index, true))
+                } else {
+                    let point = Vec2::new(point.x as f32, point.y as f32);
+                    // min_by_key requires Ord
+                    gs.iter()
+                        .map(|g| (g.position.distance_squared(point), g.byte_index))
+                        .reduce(|a, b| if b.0 < a.0 { b } else { a })
+                        .map(|(_, byte_index)| piet::HitTestPoint::new(byte_index, false))
+                }
+            })
+            .unwrap_or_default()
     }
 
     fn hit_test_text_position(&self, idx: usize) -> piet::HitTestPosition {
