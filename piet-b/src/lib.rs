@@ -15,7 +15,7 @@ use bevy::{
 };
 use glyph_brush_layout::ab_glyph::{self, ScaleFont};
 use piet::TextAttribute;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, sync::Arc};
 
 // Piet is reexported; all collisions are prefixed/aliased.
 pub use piet::kurbo;
@@ -66,8 +66,8 @@ pub struct PietTextParams<'w, 's> {
 }
 
 pub struct Piet<'w, 's> {
-    commands: Rc<RefCell<Commands<'w, 's>>>,
-    asset_server: Rc<Res<'w, AssetServer>>,
+    commands: Arc<RefCell<Commands<'w, 's>>>,
+    asset_server: Arc<Res<'w, AssetServer>>,
     nodes: NodesQuery<'w, 's>,
     text_nodes: TextNodesQuery<'w, 's>,
     text: PietText<'w, 's>,
@@ -82,8 +82,8 @@ impl<'w, 's> Piet<'w, 's> {
             text_nodes,
             text_params,
         } = params;
-        let commands = Rc::new(RefCell::new(commands));
-        let asset_server = Rc::new(asset_server);
+        let commands = Arc::new(RefCell::new(commands));
+        let asset_server = Arc::new(asset_server);
         let text = PietText::new(commands.clone(), asset_server.clone(), text_params);
         Self {
             commands,
@@ -198,7 +198,12 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
                     size: Vec2::new(size.width as f32, size.height as f32),
                 },
                 color: UiColor(color),
-                transform: Transform::from_xyz(center.x as f32, center.y as f32, 0.0),
+                transform: Transform::from_xyz(
+                    center.x as f32,
+                    // Invert y.
+                    (self.window_rect().height() - center.y) as f32,
+                    0.0,
+                ),
                 ..Default::default()
             });
         } else {
@@ -318,20 +323,20 @@ impl<'w, 's> piet::IntoBrush<Piet<'w, 's>> for Brush {
 // refs?
 #[derive(Clone)]
 pub struct PietText<'w, 's> {
-    pub commands: Rc<RefCell<Commands<'w, 's>>>,
-    pub asset_server: Rc<Res<'w, AssetServer>>,
-    pub textures: Rc<RefCell<ResMut<'w, Assets<Image>>>>,
-    pub fonts: Rc<Res<'w, Assets<Font>>>,
-    pub windows: Rc<Res<'w, Windows>>,
-    pub texture_atlases: Rc<RefCell<ResMut<'w, Assets<TextureAtlas>>>>,
-    pub font_atlas_set_storage: Rc<RefCell<ResMut<'w, Assets<FontAtlasSet>>>>,
-    pub text_pipeline: Rc<RefCell<ResMut<'w, DefaultTextPipeline>>>,
+    pub commands: Arc<RefCell<Commands<'w, 's>>>,
+    pub asset_server: Arc<Res<'w, AssetServer>>,
+    pub textures: Arc<RefCell<ResMut<'w, Assets<Image>>>>,
+    pub fonts: Arc<Res<'w, Assets<Font>>>,
+    pub windows: Arc<Res<'w, Windows>>,
+    pub texture_atlases: Arc<RefCell<ResMut<'w, Assets<TextureAtlas>>>>,
+    pub font_atlas_set_storage: Arc<RefCell<ResMut<'w, Assets<FontAtlasSet>>>>,
+    pub text_pipeline: Arc<RefCell<ResMut<'w, DefaultTextPipeline>>>,
 }
 
 impl<'w, 's> PietText<'w, 's> {
     pub fn new(
-        commands: Rc<RefCell<Commands<'w, 's>>>,
-        asset_server: Rc<Res<'w, AssetServer>>,
+        commands: Arc<RefCell<Commands<'w, 's>>>,
+        asset_server: Arc<Res<'w, AssetServer>>,
         params: PietTextParams<'w, 's>,
     ) -> Self {
         let PietTextParams {
@@ -347,12 +352,12 @@ impl<'w, 's> PietText<'w, 's> {
         Self {
             commands,
             asset_server,
-            textures: Rc::new(textures.into()),
-            fonts: Rc::new(fonts),
-            windows: Rc::new(windows),
-            texture_atlases: Rc::new(texture_atlases.into()),
-            font_atlas_set_storage: Rc::new(font_atlas_set_storage.into()),
-            text_pipeline: Rc::new(text_pipeline.into()),
+            textures: Arc::new(textures.into()),
+            fonts: fonts.into(),
+            windows: windows.into(),
+            texture_atlases: Arc::new(texture_atlases.into()),
+            font_atlas_set_storage: Arc::new(font_atlas_set_storage.into()),
+            text_pipeline: Arc::new(text_pipeline.into()),
         }
     }
 }
@@ -371,7 +376,8 @@ impl<'w, 's> piet::Text for PietText<'w, 's> {
 
     fn new_text_layout(&mut self, text: impl piet::TextStorage) -> Self::TextLayoutBuilder {
         Self::TextLayoutBuilder {
-            text: Rc::new(text),
+            // Layouts need to fulfill Resource so clone now to Arc<str>.
+            text: text.as_str().to_string().into(),
             params: self.clone(),
             max_width: f64::MAX,
             alignment: piet::TextAlignment::Start,
@@ -384,26 +390,30 @@ impl<'w, 's> piet::Text for PietText<'w, 's> {
 
 // This struct persists inside widgets and needs to hold onto
 // everything it needs to fulfill the impl.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PietTextLayout {
     pub entity: Entity,
-    pub text: Rc<dyn piet::TextStorage>,
+    pub text: Arc<str>,
     // we don't need these anymore after generating line metrics?
-    pub glyphs: Rc<Vec<PositionedGlyph>>,
+    pub glyphs: Arc<Vec<PositionedGlyph>>,
     pub size: kurbo::Size,
-    pub line_metrics: Rc<[piet::LineMetric]>,
-    //pub line_breaks: Rc<[]>,
-}
-
-pub fn glyph_rect(glyph: &PositionedGlyph) -> kurbo::Rect {
-    // the glyph position is the center
-    kurbo::Rect::from_center_size(
-        (glyph.position.x as f64, glyph.position.y as f64),
-        (glyph.size.x as f64, glyph.size.y as f64),
-    )
+    pub line_metrics: Arc<[piet::LineMetric]>,
+    //pub line_breaks: Arc<[]>,
 }
 
 impl PietTextLayout {
+    pub fn glyph_rect(&self, glyph: &PositionedGlyph) -> kurbo::Rect {
+        // the glyph position is the center
+        kurbo::Rect::from_center_size(
+            (
+                glyph.position.x as f64,
+                // Bevy is y-up, Piet is y-down.
+                self.size.height - glyph.position.y as f64,
+            ),
+            (glyph.size.x as f64, glyph.size.y as f64),
+        )
+    }
+
     // Returns a slice of glyphs in the specified byte range. This
     // assumes glyphs are sorted by byte_index.
     fn glyph_range(&self, range: std::ops::Range<usize>) -> Option<&[PositionedGlyph]> {
@@ -413,9 +423,24 @@ impl PietTextLayout {
             .and_then(|start| {
                 self.glyphs[start..]
                     .iter()
-                    .rposition(|g| g.byte_index <= range.end)
-                    .map(|end| &self.glyphs[start..end])
+                    .rposition(|g| g.byte_index < range.end)
+                    .map(|end| {
+                        let end = start + end + 1; // exclusive
+                        &self.glyphs[start..end]
+                    })
             })
+    }
+}
+
+impl std::fmt::Display for PietTextLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chars: Vec<_> = self.text.chars().collect();
+        let glyphs: Vec<_> = self
+            .glyphs
+            .iter()
+            .map(|g| (g.byte_index, chars[g.byte_index]))
+            .collect();
+        write!(f, "{:?}", glyphs)
     }
 }
 
@@ -459,12 +484,15 @@ impl piet::TextLayout for PietTextLayout {
             .iter()
             .find(|l| point.y <= (l.y_offset + l.height))
             .or_else(|| self.line_metrics.last())
+            // Save glyph ranges per line on build?
             .and_then(|l| self.glyph_range(l.range()))
             .and_then(|gs| {
-                if let Some(g) = gs.iter().find(|g| glyph_rect(g).contains(point)) {
+                if let Some(g) = gs.iter().find(|g| self.glyph_rect(g).contains(point)) {
                     Some(piet::HitTestPoint::new(g.byte_index, true))
                 } else {
-                    let point = Vec2::new(point.x as f32, point.y as f32);
+                    // Find closest glyph to point via center. This
+                    // should use the left edge.
+                    let point = Vec2::new(point.x as f32, (self.size.height - point.y) as f32);
                     // min_by_key requires Ord
                     gs.iter()
                         .map(|g| (g.position.distance_squared(point), g.byte_index))
@@ -482,7 +510,7 @@ impl piet::TextLayout for PietTextLayout {
 
 // TODO: split attributes into sections?
 pub struct PietTextLayoutBuilder<'w, 's> {
-    text: Rc<dyn piet::TextStorage>,
+    text: Arc<str>,
     params: PietText<'w, 's>,
     max_width: f64,
     alignment: piet::TextAlignment,
@@ -635,9 +663,11 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                         // These offsets only work because we only
                         // have one section. FIX:
                         start_offset: glyphs[start].byte_index,
-                        // This does not include trailing whitespace
-                        // since we're building off glyphs. FIX:
-                        end_offset: glyphs[end - 1].byte_index,
+                        // 1) This does not include trailing
+                        // whitespace since we're building off
+                        // glyphs. 2) This may be wrong w/ respect to
+                        // utf8. FIX:
+                        end_offset: glyphs[end - 1].byte_index + 1,
                         // TODO:
                         trailing_whitespace: 0,
                         baseline: *ascent,
@@ -650,7 +680,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                 Ok(PietTextLayout {
                     entity,
                     text: self.text.clone(),
-                    glyphs: Rc::new(glyphs),
+                    glyphs: glyphs.into(),
                     size,
                     line_metrics: line_metrics.into(),
                 })

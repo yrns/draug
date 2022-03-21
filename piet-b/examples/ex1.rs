@@ -1,7 +1,7 @@
 use bevy::{prelude::*, window::WindowResized};
 
 use piet_b::{
-    self as piet, glyph_rect, kurbo, FontFamily, Piet, RenderContext, Text, TextLayout,
+    self as piet, kurbo, FontFamily, Piet, PietTextLayout, RenderContext, Text, TextLayout,
     TextLayoutBuilder,
 };
 
@@ -34,38 +34,83 @@ fn setup(mut commands: Commands) {
     commands.spawn_bundle(UiCameraBundle::default());
 }
 
-fn draw(mut drawn: Local<bool>, mut resized: EventReader<WindowResized>, params: piet::PietParams) {
-    let resized = resized.iter().next().is_some();
+fn draw(
+    mut layout: Local<Option<PietTextLayout>>,
+    mut resized: EventReader<WindowResized>,
+    mut cursor_moved: EventReader<CursorMoved>,
+    mut hit_test_point: Local<Option<piet::HitTestPoint>>,
+    params: piet::PietParams,
+) {
+    let mut redraw = resized.iter().next().is_some();
+    let window = params.text_params.windows.primary();
+    let width = window.width() as f64;
+    let height = window.height() as f64;
+    let center = kurbo::Point::new(width * 0.5, height * 0.5);
 
-    if !*drawn || resized {
-        let window = params.text_params.windows.primary();
-        let width = window.width() as f64;
-        let height = window.height() as f64;
-        let center = kurbo::Point::new(width * 0.5, height * 0.5);
+    if let Some(layout) = &*layout {
+        if let Some(event) = cursor_moved.iter().last() {
+            let rect = kurbo::Rect::from_center_size(center, layout.size());
+            // cursor position relative to the layout
+            let cursor =
+                (kurbo::Vec2::new(event.position.x as f64, height - event.position.y as f64)
+                    - rect.origin().to_vec2())
+                .to_point();
 
+            let rect = rect.with_origin(kurbo::Point::ZERO);
+            let h = if rect.contains(cursor) {
+                Some(layout.hit_test_point(cursor))
+            } else {
+                None
+            };
+            if h != *hit_test_point {
+                *hit_test_point = h;
+                redraw = true;
+            }
+        }
+    }
+
+    if layout.is_none() || redraw {
         let mut piet = Piet::new(params);
         let family = FontFamily::new_unchecked("Vollkorn-Regular.ttf");
-        if let Ok(layout) = piet
+        *layout = if let Ok(layout) = piet
             .text()
             .new_text_layout("Hello,\npiet. ")
             .font(family, 64.0)
             .build()
         {
-            let size = layout.size();
-            let rect = kurbo::Rect::from_center_size(center, size);
+            piet.clear(None, piet::Color::TRANSPARENT);
+
+            let rect = kurbo::Rect::from_center_size(center, layout.size());
 
             piet.fill(rect, &piet::Color::WHITE);
 
-            let color = piet::Color::RED.with_alpha(0.3);
+            let bg = piet::Color::GRAY.with_alpha(0.4);
+            let yellow = piet::Color::YELLOW.with_alpha(0.4);
             for glyph in layout.glyphs.iter() {
-                let glyph_rect = glyph_rect(glyph) + rect.origin().to_vec2();
-                piet.fill(glyph_rect, &color);
+                let glyph_rect = layout.glyph_rect(glyph) + rect.origin().to_vec2();
+                piet.fill(glyph_rect, {
+                    match &*hit_test_point {
+                        Some(h) => {
+                            if h.idx == glyph.byte_index {
+                                if h.is_inside {
+                                    &piet::Color::YELLOW
+                                } else {
+                                    &yellow
+                                }
+                            } else {
+                                &bg
+                            }
+                        }
+                        _ => &bg,
+                    }
+                });
             }
 
             piet.draw_text(&layout, rect.origin());
-            *drawn = true;
+            Some(layout)
         } else {
             // font is still loading
+            None
         }
     }
 }
