@@ -25,9 +25,21 @@ pub type NodesQuery<'w, 's> = Query<
     'w,
     's,
     (
+        Entity,
         &'static Node,
         &'static UiColor,
         &'static UiImage,
+        &'static Transform,
+    ),
+>;
+
+pub type TextNodesQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static Node,
+        &'static bevy::text::Text,
         &'static Transform,
     ),
 >;
@@ -37,6 +49,7 @@ pub struct PietParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub asset_server: Res<'w, AssetServer>,
     pub nodes: NodesQuery<'w, 's>,
+    pub text_nodes: TextNodesQuery<'w, 's>,
     pub text_params: PietTextParams<'w, 's>,
 }
 
@@ -56,6 +69,7 @@ pub struct Piet<'w, 's> {
     commands: Rc<RefCell<Commands<'w, 's>>>,
     asset_server: Rc<Res<'w, AssetServer>>,
     nodes: NodesQuery<'w, 's>,
+    text_nodes: TextNodesQuery<'w, 's>,
     text: PietText<'w, 's>,
 }
 
@@ -65,6 +79,7 @@ impl<'w, 's> Piet<'w, 's> {
             commands,
             asset_server,
             nodes,
+            text_nodes,
             text_params,
         } = params;
         let commands = Rc::new(RefCell::new(commands));
@@ -74,8 +89,16 @@ impl<'w, 's> Piet<'w, 's> {
             commands,
             asset_server,
             nodes,
+            text_nodes,
             text,
         }
+    }
+
+    pub fn window_rect(&self) -> kurbo::Rect {
+        let window = self.text.windows.primary();
+        let width = window.width() as f64;
+        let height = window.height() as f64;
+        kurbo::Rect::default().with_size((width, height))
     }
 }
 
@@ -124,8 +147,24 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         todo!()
     }
 
-    fn clear(&mut self, _region: impl Into<Option<kurbo::Rect>>, _color: piet::Color) {
-        todo!()
+    fn clear(&mut self, region: impl Into<Option<kurbo::Rect>>, color: piet::Color) {
+        match region.into() {
+            Some(_) => unimplemented!(),
+            None => {
+                {
+                    let mut commands = self.commands.borrow_mut();
+                    for (entity, ..) in self.nodes.iter() {
+                        commands.entity(entity).despawn();
+                    }
+                    for (entity, ..) in self.text_nodes.iter() {
+                        commands.entity(entity).despawn();
+                    }
+                }
+                if color != piet::Color::TRANSPARENT {
+                    self.fill(self.window_rect(), &color);
+                }
+            }
+        }
     }
 
     fn stroke(
