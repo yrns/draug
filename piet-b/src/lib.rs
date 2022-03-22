@@ -502,8 +502,22 @@ impl piet::TextLayout for PietTextLayout {
             .unwrap_or_default()
     }
 
+    // If the offset is whitespace we will get the previous glyph?
     fn hit_test_text_position(&self, idx: usize) -> piet::HitTestPosition {
-        todo!()
+        let idx = idx.min(self.text.len());
+        assert!(self.text.is_char_boundary(idx));
+        let n = piet::util::line_number_for_position(&self.line_metrics, idx);
+        let l = &self.line_metrics[n];
+        let gs = self.glyph_range(l.range()).unwrap();
+        let g = &gs[gs
+            .binary_search_by_key(&idx, |g| g.byte_index)
+            .unwrap_or_else(|n| n.saturating_sub(1))];
+        let point = kurbo::Point::new(
+            (g.position.x - g.size.x * 0.5) as f64,
+            (l.y_offset + l.baseline) as f64,
+        );
+
+        piet::HitTestPosition::new(point, n)
     }
 }
 
