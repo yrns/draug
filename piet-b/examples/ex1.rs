@@ -1,8 +1,8 @@
 use bevy::{prelude::*, window::WindowResized};
 
 use piet_b::{
-    self as piet, kurbo, FontFamily, Piet, PietTextLayout, RenderContext, Text, TextLayout,
-    TextLayoutBuilder,
+    self as piet, kurbo, FontFamily, Piet, PietImage, PietTextLayout, RenderContext, Text,
+    TextLayout, TextLayoutBuilder,
 };
 
 fn main() {
@@ -30,11 +30,13 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn_bundle(UiCameraBundle::default());
+    commands.insert_resource(PietImage::from(asset_server.load("hatch.png")));
 }
 
 fn draw(
+    image: Res<PietImage>,
     mut layout: Local<Option<PietTextLayout>>,
     mut resized: EventReader<WindowResized>,
     mut cursor_moved: EventReader<CursorMoved>,
@@ -45,7 +47,8 @@ fn draw(
     let window = params.text_params.windows.primary();
     let width = window.width() as f64;
     let height = window.height() as f64;
-    let center = kurbo::Point::new(width * 0.5, height * 0.5);
+    let window_rect = kurbo::Rect::default().with_size((width, height));
+    let center = window_rect.center();
 
     if let Some(layout) = &*layout {
         if let Some(event) = cursor_moved.iter().last() {
@@ -81,6 +84,12 @@ fn draw(
             piet.clear(None, piet::Color::TRANSPARENT);
 
             let rect = kurbo::Rect::from_center_size(center, layout.size());
+
+            piet.draw_image(
+                &*image,
+                kurbo::Rect::from_center_size(center, (256.0, 256.0)),
+                piet::InterpolationMode::Bilinear,
+            );
 
             piet.fill(rect, &piet::Color::WHITE);
 

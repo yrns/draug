@@ -2,8 +2,8 @@ use bevy::{
     ecs::system::SystemParam,
     math::{Size, Vec2},
     prelude::{
-        App, AssetServer, Assets, Bundle, CameraUi, Commands, Entity, GlobalTransform, Image,
-        Plugin, Query, Res, ResMut, TextureAtlas, Transform, Visibility,
+        App, AssetServer, Assets, Bundle, CameraUi, Commands, Entity, GlobalTransform, Handle,
+        Image, Plugin, Query, Res, ResMut, TextureAtlas, Transform, Visibility,
     },
     render::camera::CameraTypePlugin,
     text::{
@@ -267,9 +267,25 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         &mut self,
         image: &Self::Image,
         dst_rect: impl Into<kurbo::Rect>,
-        interp: piet::InterpolationMode,
+        _interp: piet::InterpolationMode,
     ) {
-        todo!()
+        let rect = dst_rect.into();
+        let center = rect.center();
+        let size = rect.size();
+
+        self.commands.borrow_mut().spawn_bundle(NodeBundle {
+            node: Node {
+                size: Vec2::new(size.width as f32, size.height as f32),
+            },
+            image: UiImage(image.0.clone()),
+            transform: Transform::from_xyz(
+                center.x as f32,
+                // Invert y.
+                (self.window_rect().height() - center.y) as f32,
+                0.0,
+            ),
+            ..Default::default()
+        });
     }
 
     fn draw_image_area(
@@ -743,12 +759,19 @@ fn lines(glyphs: &Vec<PositionedGlyph>) -> Vec<(usize, usize)> {
     lines
 }
 
-#[derive(Clone)]
-pub struct PietImage;
+#[derive(Clone, Debug)]
+pub struct PietImage(Handle<Image>);
 
 impl piet::Image for PietImage {
     fn size(&self) -> kurbo::Size {
+        // needs resources, who calls this?
         todo!()
+    }
+}
+
+impl From<Handle<Image>> for PietImage {
+    fn from(handle: Handle<Image>) -> Self {
+        Self(handle)
     }
 }
 
