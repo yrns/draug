@@ -84,6 +84,9 @@ fn draw(
 
             piet.fill(rect, &piet::Color::WHITE);
 
+            let image_bounds = layout.image_bounds() + rect.origin().to_vec2();
+            piet.fill(&image_bounds, &piet::Color::AQUA.with_alpha(0.4));
+
             let bg = piet::Color::GRAY.with_alpha(0.4);
             let yellow = piet::Color::YELLOW.with_alpha(0.4);
             for glyph in layout.glyphs.iter() {

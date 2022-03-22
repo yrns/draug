@@ -398,7 +398,7 @@ pub struct PietTextLayout {
     pub glyphs: Arc<Vec<PositionedGlyph>>,
     pub size: kurbo::Size,
     pub line_metrics: Arc<[piet::LineMetric]>,
-    //pub line_breaks: Arc<[]>,
+    pub image_bounds: kurbo::Rect,
 }
 
 impl PietTextLayout {
@@ -456,8 +456,7 @@ impl piet::TextLayout for PietTextLayout {
     }
 
     fn image_bounds(&self) -> kurbo::Rect {
-        // position + size()?
-        todo!()
+        self.image_bounds
     }
 
     fn text(&self) -> &str {
@@ -677,12 +676,24 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                     y_offset += *height + *line_gap;
                 }
 
+                let image_bounds = glyphs
+                    .iter()
+                    .map(|g| {
+                        kurbo::Rect::from_center_size(
+                            (g.position.x as f64, size.height - g.position.y as f64),
+                            (g.size.x as f64, g.size.y as f64),
+                        )
+                    })
+                    .reduce(|r, gr| r.union(gr))
+                    .unwrap_or_default();
+
                 Ok(PietTextLayout {
                     entity,
                     text: self.text.clone(),
                     glyphs: glyphs.into(),
                     size,
                     line_metrics: line_metrics.into(),
+                    image_bounds,
                 })
             }
             Err(TextError::NoSuchFont) => {
