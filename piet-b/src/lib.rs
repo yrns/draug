@@ -5,7 +5,10 @@ use bevy::{
         App, AssetServer, Assets, Bundle, CameraUi, Commands, Entity, GlobalTransform, Handle,
         Image, Plugin, Query, Res, ResMut, TextureAtlas, Transform, Visibility,
     },
-    render::camera::CameraTypePlugin,
+    render::{
+        camera::CameraTypePlugin,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+    },
     text::{
         DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextAlignment,
         TextError, TextSection, TextStyle, VerticalAlign,
@@ -67,7 +70,6 @@ pub struct PietTextParams<'w, 's> {
 
 pub struct Piet<'w, 's> {
     commands: Arc<RefCell<Commands<'w, 's>>>,
-    asset_server: Arc<Res<'w, AssetServer>>,
     nodes: NodesQuery<'w, 's>,
     text_nodes: TextNodesQuery<'w, 's>,
     text: PietText<'w, 's>,
@@ -84,10 +86,9 @@ impl<'w, 's> Piet<'w, 's> {
         } = params;
         let commands = Arc::new(RefCell::new(commands));
         let asset_server = Arc::new(asset_server);
-        let text = PietText::new(commands.clone(), asset_server.clone(), text_params);
+        let text = PietText::new(commands.clone(), asset_server, text_params);
         Self {
             commands,
-            asset_server,
             nodes,
             text_nodes,
             text,
@@ -123,6 +124,16 @@ fn convert_alignment(alignment: piet::TextAlignment) -> TextAlignment {
             horizontal: HorizontalAlign::Center,
         },
         piet::TextAlignment::Justified => unimplemented!(),
+    }
+}
+
+fn convert_image_format(format: piet::ImageFormat) -> TextureFormat {
+    match format {
+        ImageFormat::Grayscale => TextureFormat::R8Unorm,
+        ImageFormat::Rgb => unimplemented!(),
+        ImageFormat::RgbaSeparate => TextureFormat::Rgba32Uint,
+        ImageFormat::RgbaPremul => TextureFormat::Rgba32Uint,
+        _ => unimplemented!(),
     }
 }
 
@@ -260,7 +271,21 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         buf: &[u8],
         format: piet::ImageFormat,
     ) -> Result<Self::Image, piet::Error> {
-        todo!()
+        let mut textures = self.text.textures.borrow_mut();
+        let image = Image::new_fill(
+            Extent3d {
+                width: width as u32,
+                height: height as u32,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            buf,
+            // ImageFormat::RgbaPremul needs to be handled in the
+            // render pipeline
+            convert_image_format(format),
+        );
+        let image = textures.add(image);
+        Ok(image.into())
     }
 
     fn draw_image(
