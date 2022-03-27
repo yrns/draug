@@ -3,21 +3,20 @@ use bevy::{
     math::{Size, Vec2},
     prelude::{
         App, AssetServer, Assets, Bundle, CameraUi, Commands, Entity, GlobalTransform, Handle,
-        Image, Plugin, Query, Res, ResMut, TextureAtlas, Transform, Visibility,
+        Image as BevyImage, Plugin, Query, Res, ResMut, TextureAtlas, Transform, Visibility,
     },
     render::{
         camera::CameraTypePlugin,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
     },
     text::{
-        DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextAlignment,
-        TextError, TextSection, TextStyle, VerticalAlign,
+        DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextError,
+        TextSection, TextStyle, VerticalAlign,
     },
     ui::{Node, UiColor, UiImage},
     window::Windows,
 };
 use glyph_brush_layout::ab_glyph::{self, ScaleFont};
-use piet::TextAttribute;
 use std::{cell::RefCell, sync::Arc};
 
 // Piet is reexported; all collisions are prefixed/aliased.
@@ -58,7 +57,7 @@ pub struct PietParams<'w, 's> {
 
 #[derive(SystemParam)]
 pub struct PietTextParams<'w, 's> {
-    pub textures: ResMut<'w, Assets<Image>>,
+    pub textures: ResMut<'w, Assets<BevyImage>>,
     pub fonts: Res<'w, Assets<Font>>,
     pub windows: Res<'w, Windows>,
     pub texture_atlases: ResMut<'w, Assets<TextureAtlas>>,
@@ -108,18 +107,18 @@ fn convert_color(color: piet::Color) -> bevy::prelude::Color {
     bevy::prelude::Color::rgba_u8(r, g, b, a)
 }
 
-fn convert_alignment(alignment: piet::TextAlignment) -> TextAlignment {
+fn convert_alignment(alignment: piet::TextAlignment) -> bevy::text::TextAlignment {
     match alignment {
         // ignoring right to left for now
-        piet::TextAlignment::Start => TextAlignment {
+        piet::TextAlignment::Start => bevy::text::TextAlignment {
             vertical: VerticalAlign::Center,
             horizontal: HorizontalAlign::Left,
         },
-        piet::TextAlignment::End => TextAlignment {
+        piet::TextAlignment::End => bevy::text::TextAlignment {
             vertical: VerticalAlign::Center,
             horizontal: HorizontalAlign::Right,
         },
-        piet::TextAlignment::Center => TextAlignment {
+        piet::TextAlignment::Center => bevy::text::TextAlignment {
             vertical: VerticalAlign::Center,
             horizontal: HorizontalAlign::Center,
         },
@@ -272,7 +271,7 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         format: piet::ImageFormat,
     ) -> Result<Self::Image, piet::Error> {
         let mut textures = self.text.textures.borrow_mut();
-        let image = Image::new_fill(
+        let image = BevyImage::new_fill(
             Extent3d {
                 width: width as u32,
                 height: height as u32,
@@ -366,7 +365,7 @@ impl<'w, 's> piet::IntoBrush<Piet<'w, 's>> for Brush {
 pub struct PietText<'w, 's> {
     pub commands: Arc<RefCell<Commands<'w, 's>>>,
     pub asset_server: Arc<Res<'w, AssetServer>>,
-    pub textures: Arc<RefCell<ResMut<'w, Assets<Image>>>>,
+    pub textures: Arc<RefCell<ResMut<'w, Assets<BevyImage>>>>,
     pub fonts: Arc<Res<'w, Assets<Font>>>,
     pub windows: Arc<Res<'w, Windows>>,
     pub texture_atlases: Arc<RefCell<ResMut<'w, Assets<TextureAtlas>>>>,
@@ -586,11 +585,11 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
         self
     }
 
-    fn default_attribute(mut self, attr: impl Into<TextAttribute>) -> Self {
+    fn default_attribute(mut self, attr: impl Into<piet::TextAttribute>) -> Self {
         match attr.into() {
-            TextAttribute::TextColor(color) => self.color = color,
-            TextAttribute::FontFamily(font) => self.font = Some(font),
-            TextAttribute::FontSize(size) => self.size = size,
+            piet::TextAttribute::TextColor(color) => self.color = color,
+            piet::TextAttribute::FontFamily(font) => self.font = Some(font),
+            piet::TextAttribute::FontSize(size) => self.size = size,
             _ => (),
         }
         self
@@ -785,7 +784,7 @@ fn lines(glyphs: &Vec<PositionedGlyph>) -> Vec<(usize, usize)> {
 }
 
 #[derive(Clone, Debug)]
-pub struct PietImage(Handle<Image>);
+pub struct PietImage(Handle<BevyImage>);
 
 impl piet::Image for PietImage {
     fn size(&self) -> kurbo::Size {
@@ -794,8 +793,8 @@ impl piet::Image for PietImage {
     }
 }
 
-impl From<Handle<Image>> for PietImage {
-    fn from(handle: Handle<Image>) -> Self {
+impl From<Handle<BevyImage>> for PietImage {
+    fn from(handle: Handle<BevyImage>) -> Self {
         Self(handle)
     }
 }
