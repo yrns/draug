@@ -8,10 +8,6 @@ use piet_b::{
 fn main() {
     App::new()
         //.add_plugins(DefaultPlugins)
-        .insert_resource(WindowDescriptor {
-            scale_factor_override: Some(1.0),
-            ..Default::default()
-        })
         .add_plugin(bevy::log::LogPlugin::default())
         .add_plugin(bevy::core::CorePlugin::default())
         .add_plugin(bevy::transform::TransformPlugin::default())
