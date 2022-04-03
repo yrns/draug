@@ -157,10 +157,11 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         todo!()
     }
 
+    // TODO: Partial clearing of entities.
     fn clear(&mut self, region: impl Into<Option<kurbo::Rect>>, color: piet::Color) {
         match region.into() {
-            Some(_) => unimplemented!(),
-            None => {
+            //Some(_) => unimplemented!(),
+            _ => {
                 {
                     let mut commands = self.commands.borrow_mut();
                     for (entity, ..) in self.nodes.iter() {
@@ -256,7 +257,7 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     }
 
     fn finish(&mut self) -> Result<(), piet::Error> {
-        todo!()
+        Ok(())
     }
 
     fn transform(&mut self, _transform: kurbo::Affine) {
@@ -491,8 +492,9 @@ impl piet::TextLayout for PietTextLayout {
         self.size
     }
 
+    // TODO:
     fn trailing_whitespace_width(&self) -> f64 {
-        todo!()
+        0.
     }
 
     fn image_bounds(&self) -> kurbo::Rect {
