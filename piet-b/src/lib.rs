@@ -760,6 +760,8 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
     }
 }
 
+// Start a new line for any glyph where the glyph's x position is less
+// than the previous glyph's.
 fn lines(glyphs: &Vec<PositionedGlyph>) -> Vec<(usize, usize)> {
     let mut lines = Vec::new();
     let mut start = 0;
@@ -776,7 +778,7 @@ fn lines(glyphs: &Vec<PositionedGlyph>) -> Vec<(usize, usize)> {
     }
 
     // last line
-    if lines.len() > 0 {
+    if glyphs.len() > 0 {
         lines.push((start, glyphs.len()));
     }
 
