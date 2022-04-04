@@ -842,14 +842,10 @@ pub struct PietPlugin;
 
 impl Plugin for PietPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(bevy::window::WindowDescriptor {
-            scale_factor_override: Some(1.0),
-            ..Default::default()
-        })
-        .add_plugin(CameraTypePlugin::<CameraUi>::default())
-        .register_type::<Node>()
-        .register_type::<UiColor>()
-        .register_type::<UiImage>();
+        app.add_plugin(CameraTypePlugin::<CameraUi>::default())
+            .register_type::<Node>()
+            .register_type::<UiColor>()
+            .register_type::<UiImage>();
         // render systems
         bevy::ui::build_ui_render(app);
     }
