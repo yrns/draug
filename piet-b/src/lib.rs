@@ -136,6 +136,14 @@ fn convert_image_format(format: piet::ImageFormat) -> TextureFormat {
     }
 }
 
+// Many of the default widgets use rounded rects, just map them to
+// rects for now.
+fn as_rect(shape: &impl kurbo::Shape) -> Option<kurbo::Rect> {
+    shape
+        .as_rect()
+        .or_else(|| shape.as_rounded_rect().map(|r| r.rect()))
+}
+
 impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     type Brush = Brush;
     type Text = PietText<'w, 's>;
@@ -198,7 +206,7 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     }
 
     fn fill(&mut self, shape: impl kurbo::Shape, brush: &impl piet::IntoBrush<Self>) {
-        if let Some(rect) = shape.as_rect() {
+        if let Some(rect) = as_rect(&shape) {
             let brush = brush.make_brush(self, || shape.bounding_box()).into_owned();
             let Brush::Solid(color) = brush;
             let color = convert_color(color);
