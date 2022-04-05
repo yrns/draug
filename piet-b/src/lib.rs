@@ -242,15 +242,24 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         &mut self.text
     }
 
-    fn draw_text(&mut self, layout: &Self::TextLayout, pos: impl Into<kurbo::Point>) {
-        let rect = kurbo::Rect::from_origin_size(pos.into(), layout.size);
+    // `pt` is the left baseline. In order to find the center of the
+    // layout, which is the basis for the `Transform`, we have to
+    // subtract the first baseline.
+    fn draw_text(&mut self, layout: &Self::TextLayout, pt: impl Into<kurbo::Point>) {
+        let pt = pt.into() - kurbo::Vec2::new(0.0, layout.line_metric(0).unwrap().baseline);
+        let rect = kurbo::Rect::from_origin_size(pt, layout.size);
         let center = rect.center();
         // There is no way to tell if get_or_spawn fails (if the
         // entity is bad); we end up with a dangling transform?
         self.commands
             .borrow_mut()
             .get_or_spawn(layout.entity)
-            .insert(Transform::from_xyz(center.x as f32, center.y as f32, 0.0))
+            .insert(Transform::from_xyz(
+                center.x as f32,
+                // Invert y.
+                (self.window_rect().height() - center.y) as f32,
+                0.0,
+            ))
             .insert(Node {
                 size: Vec2::new(layout.size.width as f32, layout.size.height as f32),
             });

@@ -44,15 +44,15 @@ fn draw(
 
     if let Some(layout) = &*layout {
         if let Some(event) = cursor_moved.iter().last() {
-            let rect = kurbo::Rect::from_center_size(center, layout.size());
+            let text_rect = kurbo::Rect::from_center_size(center, layout.size());
             // cursor position relative to the layout
             let cursor =
                 (kurbo::Vec2::new(event.position.x as f64, height - event.position.y as f64)
-                    - rect.origin().to_vec2())
+                    - text_rect.origin().to_vec2())
                 .to_point();
 
-            let rect = rect.with_origin(kurbo::Point::ZERO);
-            let h = if rect.contains(cursor) {
+            let text_rect = text_rect.with_origin(kurbo::Point::ZERO);
+            let h = if text_rect.contains(cursor) {
                 Some(layout.hit_test_point(cursor))
             } else {
                 None
@@ -75,7 +75,7 @@ fn draw(
         {
             piet.clear(None, piet::Color::TRANSPARENT);
 
-            let rect = kurbo::Rect::from_center_size(center, layout.size());
+            let text_rect = kurbo::Rect::from_center_size(center, layout.size());
 
             piet.draw_image(
                 &*image,
@@ -83,15 +83,15 @@ fn draw(
                 piet::InterpolationMode::Bilinear,
             );
 
-            piet.fill(rect, &piet::Color::WHITE);
+            piet.fill(text_rect, &piet::Color::WHITE);
 
-            let image_bounds = layout.image_bounds() + rect.origin().to_vec2();
+            let image_bounds = layout.image_bounds() + text_rect.origin().to_vec2();
             piet.fill(&image_bounds, &piet::Color::AQUA.with_alpha(0.4));
 
             let bg = piet::Color::GRAY.with_alpha(0.4);
             let yellow = piet::Color::YELLOW.with_alpha(0.4);
             for glyph in layout.glyphs.iter() {
-                let glyph_rect = layout.glyph_rect(glyph) + rect.origin().to_vec2();
+                let glyph_rect = layout.glyph_rect(glyph) + text_rect.origin().to_vec2();
                 piet.fill(glyph_rect, {
                     match &*hit_test_point {
                         Some(h) => {
@@ -110,7 +110,12 @@ fn draw(
                 });
             }
 
-            piet.draw_text(&layout, rect.origin());
+            // Draw text at the first baseline inside `text_rect`.
+            piet.draw_text(
+                &layout,
+                text_rect.origin() + kurbo::Vec2::new(0.0, layout.line_metric(0).unwrap().baseline),
+            );
+
             Some(layout)
         } else {
             // font is still loading
