@@ -70,18 +70,15 @@ fn draw(
         *layout = if let Ok(layout) = piet
             .text()
             .new_text_layout("Hello,\npiet. ")
-            .font(family, 64.0)
+            .font(family.clone(), 64.0)
             .build()
         {
             piet.clear(None, piet::Color::TRANSPARENT);
 
             let text_rect = kurbo::Rect::from_center_size(center, layout.size());
 
-            piet.draw_image(
-                &*image,
-                kurbo::Rect::from_center_size(center, (256.0, 256.0)),
-                piet::InterpolationMode::Bilinear,
-            );
+            let image_rect = kurbo::Rect::from_center_size(center, (256.0, 256.0));
+            piet.draw_image(&*image, image_rect, piet::InterpolationMode::Bilinear);
 
             piet.fill(text_rect, &piet::Color::WHITE);
 
@@ -115,6 +112,32 @@ fn draw(
                 &layout,
                 text_rect.origin() + kurbo::Vec2::new(0.0, layout.line_metric(0).unwrap().baseline),
             );
+
+            // Clipped fill and text.
+            piet.with_save(|ctx| {
+                ctx.clip(image_rect);
+
+                let layout2 = ctx
+                    .text()
+                    .new_text_layout("This text is clipped.")
+                    .font(family, 32.0)
+                    .build()
+                    .unwrap();
+
+                let size = layout2.size();
+
+                // Lower left corner. Clipped near the baseline.
+                let baseline = layout2.line_metric(0).unwrap().baseline;
+                let pt = kurbo::Point::new(image_rect.x0, image_rect.y1 + baseline * 0.2);
+                ctx.draw_text(&layout2, pt);
+
+                let bg = kurbo::Rect::from_origin_size(pt - kurbo::Vec2::new(0.0, baseline), size); //.inset(10.0);
+                let purple = piet::Color::PURPLE.with_alpha(0.4);
+                ctx.fill(bg, &purple);
+
+                Ok(())
+            })
+            .unwrap();
 
             Some(layout)
         } else {

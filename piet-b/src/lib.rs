@@ -1,9 +1,10 @@
 use bevy::{
-    ecs::system::SystemParam,
-    math::{Size, Vec2},
+    ecs::system::{EntityCommands, SystemParam},
+    math::{Affine2, Affine3A, Mat3A, Size, Vec2},
     prelude::{
-        App, AssetServer, Assets, Bundle, CameraUi, Commands, Entity, GlobalTransform, Handle,
-        Image as BevyImage, Plugin, Query, Res, ResMut, TextureAtlas, Transform, Visibility,
+        App, AssetServer, Assets, Bundle, CameraUi, Commands, Component, Entity, GlobalTransform,
+        Handle, Image as BevyImage, Plugin, Query, Res, ResMut, TextureAtlas, Transform,
+        Visibility,
     },
     render::{
         camera::CameraTypePlugin,
@@ -13,7 +14,7 @@ use bevy::{
         DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextError,
         TextSection, TextStyle, VerticalAlign,
     },
-    ui::{Node, UiColor, UiImage},
+    ui::{CalculatedClip, Node, UiColor, UiImage},
     window::Windows,
 };
 use glyph_brush_layout::ab_glyph::{self, ScaleFont};
@@ -67,11 +68,19 @@ pub struct PietTextParams<'w, 's> {
     marker: std::marker::PhantomData<&'s usize>,
 }
 
+#[derive(Default)]
+pub struct State {
+    transform: Affine2,           //kurbo::Affine,
+    clip: Option<CalculatedClip>, //Option<kurbo::Rect>,
+}
+
 pub struct Piet<'w, 's> {
     commands: Arc<RefCell<Commands<'w, 's>>>,
     nodes: NodesQuery<'w, 's>,
     text_nodes: TextNodesQuery<'w, 's>,
     text: PietText<'w, 's>,
+    state: State,
+    state_stack: Vec<State>,
 }
 
 impl<'w, 's> Piet<'w, 's> {
@@ -91,14 +100,36 @@ impl<'w, 's> Piet<'w, 's> {
             nodes,
             text_nodes,
             text,
+            state: State::default(),
+            state_stack: Vec::new(),
         }
     }
 
+    // Just save on the height on create.
     pub fn window_rect(&self) -> kurbo::Rect {
         let window = self.text.windows.primary();
         let width = window.width() as f64;
         let height = window.height() as f64;
         kurbo::Rect::default().with_size((width, height))
+    }
+
+    pub fn make_transform(&self, pt: kurbo::Point) -> Transform {
+        let affine = Affine2::from_translation(Vec2::new(
+            pt.x as f32,
+            // This will not be relative to the clip?
+            (self.window_rect().height() - pt.y) as f32,
+        )) * self.state.transform;
+
+        // TODO:
+        let z = 0.0;
+
+        Transform::from_matrix(
+            Affine3A {
+                matrix3: Mat3A::from_mat2(affine.matrix2),
+                translation: affine.translation.extend(z).into(),
+            }
+            .into(),
+        )
     }
 }
 
@@ -142,6 +173,20 @@ fn as_rect(shape: &impl kurbo::Shape) -> Option<kurbo::Rect> {
     shape
         .as_rect()
         .or_else(|| shape.as_rounded_rect().map(|r| r.rect()))
+}
+
+trait MaybeInsert {
+    fn maybe_insert(&mut self, component: Option<impl Component>) -> &mut Self;
+}
+
+impl MaybeInsert for EntityCommands<'_, '_, '_> {
+    fn maybe_insert(&mut self, component: Option<impl Component>) -> &mut Self {
+        if let Some(component) = component {
+            self.insert(component)
+        } else {
+            self
+        }
+    }
 }
 
 impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
@@ -211,20 +256,20 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
             let Brush::Solid(color) = brush;
             let color = convert_color(color);
             let size = rect.size();
-            let center = rect.center();
-            self.commands.borrow_mut().spawn_bundle(NodeBundle {
-                node: Node {
-                    size: Vec2::new(size.width as f32, size.height as f32),
-                },
-                color: UiColor(color),
-                transform: Transform::from_xyz(
-                    center.x as f32,
-                    // Invert y.
-                    (self.window_rect().height() - center.y) as f32,
-                    0.0,
-                ),
-                ..Default::default()
-            });
+
+            let transform = self.make_transform(rect.center());
+
+            self.commands
+                .borrow_mut()
+                .spawn_bundle(NodeBundle {
+                    node: Node {
+                        size: Vec2::new(size.width as f32, size.height as f32),
+                    },
+                    color: UiColor(color),
+                    transform,
+                    ..Default::default()
+                })
+                .maybe_insert(self.state.clip);
         } else {
             unimplemented!()
         }
@@ -234,8 +279,17 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         todo!()
     }
 
-    fn clip(&mut self, _shape: impl kurbo::Shape) {
-        todo!()
+    fn clip(&mut self, shape: impl kurbo::Shape) {
+        if let Some(rect) = as_rect(&shape) {
+            let kurbo::Rect { x0, y0, x1, y1 } = rect;
+            let clip = CalculatedClip {
+                clip: bevy::sprite::Rect {
+                    min: Vec2::new(x0 as f32, y0 as f32),
+                    max: Vec2::new(x1 as f32, y1 as f32),
+                },
+            };
+            self.state.clip = Some(clip);
+        }
     }
 
     fn text(&mut self) -> &mut Self::Text {
@@ -248,37 +302,42 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     fn draw_text(&mut self, layout: &Self::TextLayout, pt: impl Into<kurbo::Point>) {
         let pt = pt.into() - kurbo::Vec2::new(0.0, layout.line_metric(0).unwrap().baseline);
         let rect = kurbo::Rect::from_origin_size(pt, layout.size);
-        let center = rect.center();
+
+        let transform = self.make_transform(rect.center());
+
         // There is no way to tell if get_or_spawn fails (if the
         // entity is bad); we end up with a dangling transform?
         self.commands
             .borrow_mut()
             .get_or_spawn(layout.entity)
-            .insert(Transform::from_xyz(
-                center.x as f32,
-                // Invert y.
-                (self.window_rect().height() - center.y) as f32,
-                0.0,
-            ))
+            .insert(transform)
             .insert(Node {
                 size: Vec2::new(layout.size.width as f32, layout.size.height as f32),
-            });
+            })
+            .maybe_insert(self.state.clip);
     }
 
     fn save(&mut self) -> Result<(), piet::Error> {
-        todo!()
+        self.state_stack.push(std::mem::take(&mut self.state));
+        Ok(())
     }
 
     fn restore(&mut self) -> Result<(), piet::Error> {
-        todo!()
+        if let Some(state) = self.state_stack.pop() {
+            self.state = state;
+            Ok(())
+        } else {
+            Err(piet::Error::StackUnbalance)
+        }
     }
 
     fn finish(&mut self) -> Result<(), piet::Error> {
         Ok(())
     }
 
-    fn transform(&mut self, _transform: kurbo::Affine) {
-        todo!()
+    // *= ?
+    fn transform(&mut self, transform: kurbo::Affine) {
+        self.state.transform = Affine2::from_cols_array(&transform.as_coeffs().map(|a| a as f32))
     }
 
     fn make_image(
