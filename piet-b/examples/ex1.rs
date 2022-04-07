@@ -65,7 +65,7 @@ fn draw(
     }
 
     if layout.is_none() || redraw {
-        let mut piet = Piet::new(params);
+        let mut piet = Piet::new(params, height as f32);
         let family = FontFamily::new_unchecked("Vollkorn-Regular.ttf");
         *layout = if let Ok(layout) = piet
             .text()
@@ -128,7 +128,7 @@ fn draw(
 
                 // Lower left corner. Clipped near the baseline.
                 let baseline = layout2.line_metric(0).unwrap().baseline;
-                let pt = kurbo::Point::new(image_rect.x0, image_rect.y1 + baseline * 0.2);
+                let pt = kurbo::Point::new(image_rect.x0, image_rect.y1 + baseline * 0.05);
                 ctx.draw_text(&layout2, pt);
 
                 let bg = kurbo::Rect::from_origin_size(pt - kurbo::Vec2::new(0.0, baseline), size); //.inset(10.0);

@@ -81,10 +81,11 @@ pub struct Piet<'w, 's> {
     text: PietText<'w, 's>,
     state: State,
     state_stack: Vec<State>,
+    flip_y: Affine2,
 }
 
 impl<'w, 's> Piet<'w, 's> {
-    pub fn new(params: PietParams<'w, 's>) -> Self {
+    pub fn new(params: PietParams<'w, 's>, height: f32) -> Self {
         let PietParams {
             commands,
             asset_server,
@@ -95,6 +96,9 @@ impl<'w, 's> Piet<'w, 's> {
         let commands = Arc::new(RefCell::new(commands));
         let asset_server = Arc::new(asset_server);
         let text = PietText::new(commands.clone(), asset_server, text_params);
+
+        let flip_y = Affine2::from_cols_array(&[1.0, 0., 0., -1.0, 0., height]);
+
         Self {
             commands,
             nodes,
@@ -102,6 +106,7 @@ impl<'w, 's> Piet<'w, 's> {
             text,
             state: State::default(),
             state_stack: Vec::new(),
+            flip_y,
         }
     }
 
@@ -114,22 +119,22 @@ impl<'w, 's> Piet<'w, 's> {
     }
 
     pub fn make_transform(&self, pt: kurbo::Point) -> Transform {
-        let affine = Affine2::from_translation(Vec2::new(
-            pt.x as f32,
-            // This will not be relative to the clip?
-            (self.window_rect().height() - pt.y) as f32,
-        )) * self.state.transform;
+        let affine =
+            Affine2::from_translation(Vec2::new(pt.x as f32, pt.y as f32)) * self.state.transform;
 
         // TODO:
         let z = 0.0;
 
-        Transform::from_matrix(
-            Affine3A {
-                matrix3: Mat3A::from_mat2(affine.matrix2),
-                translation: affine.translation.extend(z).into(),
-            }
-            .into(),
-        )
+        let aff3 = Affine3A {
+            matrix3: Mat3A::from_mat2(affine.matrix2),
+            translation: self
+                .flip_y
+                .transform_point2(affine.translation)
+                .extend(z)
+                .into(),
+        };
+
+        Transform::from_matrix(aff3.into())
     }
 }
 
@@ -337,7 +342,8 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
 
     // *= ?
     fn transform(&mut self, transform: kurbo::Affine) {
-        self.state.transform = Affine2::from_cols_array(&transform.as_coeffs().map(|a| a as f32))
+        let coeffs = transform.as_coeffs().map(|a| a as f32);
+        self.state.transform = Affine2::from_cols_array(&coeffs);
     }
 
     fn make_image(
