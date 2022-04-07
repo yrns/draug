@@ -15,7 +15,7 @@ use bevy::{
         TextSection, TextStyle, VerticalAlign,
     },
     ui::{CalculatedClip, Node, UiColor, UiImage},
-    window::Windows,
+    window::{WindowId, Windows},
 };
 use glyph_brush_layout::ab_glyph::{self, ScaleFont};
 use std::{cell::RefCell, sync::Arc};
@@ -485,6 +485,13 @@ impl<'w, 's> PietText<'w, 's> {
     }
 }
 
+impl<'w, 's> PietText<'w, 's> {
+    pub fn scale_factor(&self) -> f64 {
+        // TODO: Multiple windows.
+        self.windows.scale_factor(WindowId::primary())
+    }
+}
+
 impl<'w, 's> piet::Text for PietText<'w, 's> {
     type TextLayoutBuilder = PietTextLayoutBuilder<'w, 's>;
     type TextLayout = PietTextLayout;
@@ -689,8 +696,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
 
     // From text_system:
     fn build(self) -> Result<Self::Out, piet::Error> {
-        // TODO: via druid?
-        let scale_factor = 1.0;
+        let scale_factor = self.params.scale_factor();
 
         let node_size = Size::new(self.max_width as f32, f32::MAX);
 
@@ -745,9 +751,21 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                     .get_glyphs(&entity)
                     .expect("Failed to get glyphs from the pipeline that have just been computed");
 
-                let size = text_layout_info.size;
+                // Font metrics will be in pixel values, but we want
+                // dp for Piet.
+                let inv_scale = (1.0 / scale_factor) as f32;
+                let size = text_layout_info.size * inv_scale;
                 let size = kurbo::Size::new(size.width as f64, size.height as f64);
-                let glyphs = text_layout_info.glyphs.clone();
+                let glyphs: Vec<_> = text_layout_info
+                    .glyphs
+                    .iter()
+                    .cloned()
+                    .map(|mut g| {
+                        g.position *= inv_scale;
+                        g.size *= inv_scale;
+                        g
+                    })
+                    .collect();
 
                 // Unfortunately we don't have access to line metrics
                 // internal to glyph_brush_layout, so we have to

@@ -8,10 +8,10 @@ use piet_b::{
 fn main() {
     App::new()
         // This needs to be before WindowPlugin.
-        .insert_resource(bevy::window::WindowDescriptor {
-            scale_factor_override: Some(1.0),
-            ..Default::default()
-        })
+        // .insert_resource(bevy::window::WindowDescriptor {
+        //     scale_factor_override: Some(1.0),
+        //     ..Default::default()
+        // })
         .add_plugins_with(DefaultPlugins, |group| {
             group.disable::<bevy::ui::UiPlugin>()
         })
