@@ -85,6 +85,7 @@ pub struct Piet<'w, 's> {
 }
 
 impl<'w, 's> Piet<'w, 's> {
+    /// `height` is the height of the drawable area in dp.
     pub fn new(params: PietParams<'w, 's>, height: f32) -> Self {
         let PietParams {
             commands,
