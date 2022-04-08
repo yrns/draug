@@ -379,22 +379,21 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         _interp: piet::InterpolationMode,
     ) {
         let rect = dst_rect.into();
-        let center = rect.center();
         let size = rect.size();
 
-        self.commands.borrow_mut().spawn_bundle(NodeBundle {
-            node: Node {
-                size: Vec2::new(size.width as f32, size.height as f32),
-            },
-            image: UiImage(image.0.clone()),
-            transform: Transform::from_xyz(
-                center.x as f32,
-                // Invert y.
-                (self.window_rect().height() - center.y) as f32,
-                0.0,
-            ),
-            ..Default::default()
-        });
+        let transform = self.make_transform(rect.center());
+
+        self.commands
+            .borrow_mut()
+            .spawn_bundle(NodeBundle {
+                node: Node {
+                    size: Vec2::new(size.width as f32, size.height as f32),
+                },
+                image: UiImage(image.0.clone()),
+                transform,
+                ..Default::default()
+            })
+            .maybe_insert(self.state.clip);
     }
 
     fn draw_image_area(
