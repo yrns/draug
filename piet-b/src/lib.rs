@@ -213,7 +213,8 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         &mut self,
         _gradient: impl Into<piet::FixedGradient>,
     ) -> Result<Self::Brush, piet::Error> {
-        todo!()
+        // TODO: This is just so the default Druid widgets won't panic.
+        Ok(Brush::Solid(piet::Color::GRAY))
     }
 
     // TODO: Partial clearing of entities.
@@ -239,11 +240,12 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
 
     fn stroke(
         &mut self,
-        _shape: impl kurbo::Shape,
-        _brush: &impl piet::IntoBrush<Self>,
+        shape: impl kurbo::Shape,
+        brush: &impl piet::IntoBrush<Self>,
         _width: f64,
     ) {
-        todo!()
+        // TODO: This is just so the default Druid widgets won't panic.
+        self.fill(shape, brush)
     }
 
     fn stroke_styled(
