@@ -115,11 +115,7 @@ fn draw(
                 });
             }
 
-            // Draw text at the first baseline inside `text_rect`.
-            piet.draw_text(
-                &layout,
-                text_rect.origin() + kurbo::Vec2::new(0.0, layout.line_metric(0).unwrap().baseline),
-            );
+            piet.draw_text(&layout, text_rect.origin());
 
             // Clipped fill and text.
             piet.with_save(|ctx| {
@@ -135,11 +131,10 @@ fn draw(
                 let size = layout2.size();
 
                 // Lower left corner. Clipped near the baseline.
-                let baseline = layout2.line_metric(0).unwrap().baseline;
-                let pt = kurbo::Point::new(image_rect.x0, image_rect.y1 + baseline * 0.05);
+                let pt = kurbo::Point::new(image_rect.x0, image_rect.y1 - size.height * 0.65);
                 ctx.draw_text(&layout2, pt);
 
-                let bg = kurbo::Rect::from_origin_size(pt - kurbo::Vec2::new(0.0, baseline), size); //.inset(10.0);
+                let bg = kurbo::Rect::from_origin_size(pt, size); //.inset(10.0);
                 let purple = piet::Color::PURPLE.with_alpha(0.4);
                 ctx.fill(bg, &purple);
 

@@ -301,12 +301,9 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         &mut self.text
     }
 
-    // `pt` is the left baseline. In order to find the center of the
-    // layout, which is the basis for the `Transform`, we have to
-    // subtract the first baseline.
+    // `pt` is the top-left of the layout.
     fn draw_text(&mut self, layout: &Self::TextLayout, pt: impl Into<kurbo::Point>) {
-        let pt = pt.into() - kurbo::Vec2::new(0.0, layout.line_metric(0).unwrap().baseline);
-        let rect = kurbo::Rect::from_origin_size(pt, layout.size);
+        let rect = kurbo::Rect::from_origin_size(pt.into(), layout.size);
 
         let transform = self.make_transform(rect.center());
 
