@@ -1,4 +1,4 @@
-use bevy::{prelude::*, window::WindowResized};
+use bevy::{prelude::*, window::WindowResized, winit::WinitSettings};
 
 use piet_b::{
     self as piet, kurbo, FontFamily, Piet, PietImage, PietTextLayout, RenderContext, Text,
@@ -17,6 +17,7 @@ fn main() {
         })
         // This replaces UiPlugin; can't have both.
         .add_plugin(piet::PietPlugin::default())
+        .insert_resource(WinitSettings::desktop_app())
         .add_startup_system(setup)
         .add_system(draw)
         .run();
