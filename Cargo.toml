@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 bevy = { path = "../clone/bevy", default-features = false, features = ["render", "bevy_winit", "x11"], version = "0.6.0" }
-# not compiling
-#druid = { path = "../clone/druid/druid", default-features = false }
-piet-b = { path = "./piet-b", version = "0.0.1" }
+# druid = { git = "https://github.com/yrns/druid", branch = "bevy", default-features = false }
+druid = { path = "../clone/druid/druid", default-features = false }
+# piet-b = { path = "./piet-b", version = "0.0.1" }
 
 [workspace]
 members = ["piet-b"]
