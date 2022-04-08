@@ -66,6 +66,7 @@ fn draw(
     }
 
     if layout.is_none() || redraw {
+        let scale_factor = window.scale_factor();
         let mut piet = Piet::new(params, height as f32);
         let family = FontFamily::new_unchecked("Vollkorn-Regular.ttf");
         *layout = if let Ok(layout) = piet
@@ -78,7 +79,13 @@ fn draw(
 
             let text_rect = kurbo::Rect::from_center_size(center, layout.size());
 
-            let image_rect = kurbo::Rect::from_center_size(center, (256.0, 256.0));
+            // The image looks bad scaled so we unscale it here. We
+            // can't get the size of the image until it's loaded -
+            // redraw on a load event?
+            let image_rect = kurbo::Rect::from_center_size(
+                center,
+                kurbo::Size::new(256.0, 256.0) / scale_factor,
+            );
             piet.draw_image(&*image, image_rect, piet::InterpolationMode::Bilinear);
 
             piet.fill(text_rect, &piet::Color::WHITE);

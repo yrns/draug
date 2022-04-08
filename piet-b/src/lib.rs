@@ -887,8 +887,10 @@ fn lines(glyphs: &Vec<PositionedGlyph>) -> Vec<(usize, usize)> {
     lines
 }
 
+// Write a system to cache size here? Trigger relayout when an image
+// loads if size() initially returns empty?
 #[derive(Clone, Debug)]
-pub struct PietImage(Handle<BevyImage>);
+pub struct PietImage(pub Handle<BevyImage>);
 
 impl piet::Image for PietImage {
     fn size(&self) -> kurbo::Size {
