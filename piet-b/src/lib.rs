@@ -340,7 +340,7 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     // *= ?
     fn transform(&mut self, transform: kurbo::Affine) {
         let coeffs = transform.as_coeffs().map(|a| a as f32);
-        self.state.transform = Affine2::from_cols_array(&coeffs);
+        self.state.transform = self.state.transform * Affine2::from_cols_array(&coeffs);
     }
 
     fn make_image(
