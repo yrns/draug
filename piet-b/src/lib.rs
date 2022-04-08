@@ -68,7 +68,7 @@ pub struct PietTextParams<'w, 's> {
     marker: std::marker::PhantomData<&'s usize>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct State {
     transform: Affine2,           //kurbo::Affine,
     clip: Option<CalculatedClip>, //Option<kurbo::Rect>,
@@ -320,7 +320,9 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
     }
 
     fn save(&mut self) -> Result<(), piet::Error> {
-        self.state_stack.push(std::mem::take(&mut self.state));
+        // Retain current state.
+        self.state_stack.push(self.state.clone());
+        // self.state_stack.push(std::mem::take(&mut self.state));
         Ok(())
     }
 
