@@ -5,7 +5,7 @@ use bevy::prelude::{
     Res, ResMut, State, SystemSet, UiCameraBundle, Windows,
 };
 use bevy::utils::HashMap;
-use bevy::window::{WindowCloseRequested, WindowCreated, WindowResized};
+use bevy::window::*;
 use druid::widget::*;
 use druid::*;
 use std::collections::VecDeque;
@@ -108,6 +108,14 @@ fn druid_window_system<T: Data + Resource + Root>(
     mut window_created: EventReader<WindowCreated>,
     mut window_resized: EventReader<WindowResized>,
     mut _window_close_req: EventReader<WindowCloseRequested>,
+    // `WinHandler::got_focus` is only used for AppState things and
+    // `lost_focus` is not used at all?
+    //mut window_focused: EventReader<WindowFocused>,
+    mut cursor_moved: EventReader<CursorMoved>,
+    // There is no `WinHandler::mouse_enter`?
+    //mut cursor_entered: EventReader<CursorEntered>,
+    mut cursor_left: EventReader<CursorLeft>,
+
     piet_params: druid::piet::PietParams,
 ) {
     // construct text only?
@@ -141,6 +149,45 @@ fn druid_window_system<T: Data + Resource + Root>(
                 piet.text(),
                 &mut command_queue,
                 Event::WindowSize(size),
+                &mut *data,
+                &*env,
+            );
+        }
+    }
+
+    for e in cursor_left.iter() {
+        if let Some(window) = windows.get_mut(&e.id) {
+            window.event(
+                piet.text(),
+                &mut command_queue,
+                Event::Internal(InternalEvent::MouseLeave),
+                &mut *data,
+                &*env,
+            );
+        }
+    }
+
+    for e in cursor_moved.iter() {
+        if let Some(window) = windows.get_mut(&e.id) {
+            let pos = Point::new(
+                e.position.x as f64,
+                // CursorMoved is in dp.
+                window.size().height - e.position.y as f64,
+            );
+            window.event(
+                piet.text(),
+                &mut command_queue,
+                Event::MouseMove(MouseEvent {
+                    pos,
+                    // Window remaps this?
+                    window_pos: pos,
+                    buttons: MouseButtons::new(), // TODO:
+                    mods: Modifiers::empty(),     // TODO:
+                    count: 0,
+                    focus: false,
+                    button: MouseButton::None,
+                    wheel_delta: Vec2::ZERO,
+                }),
                 &mut *data,
                 &*env,
             );
