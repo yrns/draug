@@ -238,14 +238,12 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
         }
     }
 
-    fn stroke(
-        &mut self,
-        shape: impl kurbo::Shape,
-        brush: &impl piet::IntoBrush<Self>,
-        _width: f64,
-    ) {
+    fn stroke(&mut self, shape: impl kurbo::Shape, brush: &impl piet::IntoBrush<Self>, width: f64) {
         // TODO: This is just so the default Druid widgets won't panic.
-        self.fill(shape, brush)
+        if let Some(rect) = as_rect(&shape) {
+            // Outer stroke?
+            self.fill(rect.inset(width), brush)
+        }
     }
 
     fn stroke_styled(
