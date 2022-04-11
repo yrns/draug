@@ -11,8 +11,8 @@ use bevy::{
         render_resource::{Extent3d, TextureDimension, TextureFormat},
     },
     text::{
-        DefaultTextPipeline, Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextError,
-        TextLayoutInfo, TextSection, TextStyle, VerticalAlign,
+        Font, FontAtlasSet, HorizontalAlign, PositionedGlyph, TextError, TextLayoutInfo,
+        TextPipeline, TextSection, TextStyle, VerticalAlign,
     },
     ui::{CalculatedClip, Node, UiColor, UiImage},
     window::{WindowId, Windows},
@@ -23,8 +23,6 @@ use std::{cell::RefCell, sync::Arc};
 // Piet is reexported; all collisions are prefixed/aliased.
 pub use piet::kurbo;
 pub use piet::*;
-
-pub struct ReservedEntity(Entity);
 
 pub type NodesQuery<'w, 's> = Query<
     'w,
@@ -65,8 +63,7 @@ pub struct PietTextParams<'w, 's> {
     pub windows: Res<'w, Windows>,
     pub texture_atlases: ResMut<'w, Assets<TextureAtlas>>,
     pub font_atlas_set_storage: ResMut<'w, Assets<FontAtlasSet>>,
-    pub text_pipeline: ResMut<'w, DefaultTextPipeline>,
-    pub reserved_entity: Res<'w, ReservedEntity>,
+    pub text_pipeline: ResMut<'w, TextPipeline>,
     #[system_param(ignore)]
     marker: std::marker::PhantomData<&'s usize>,
 }
@@ -311,12 +308,6 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
 
         let transform = self.make_transform(rect.center());
 
-        // Manual insert of glyphs.
-        // TODO: There is no way to do this in stock Bevy. Keeping
-        // these changes in the history in case this changes.
-
-        // There is no way to tell if get_or_spawn fails (if the
-        // entity is bad); we end up with a dangling transform?
         self.commands
             .borrow_mut()
             .spawn_bundle(TextBundle {
@@ -324,10 +315,16 @@ impl<'w, 's> piet::RenderContext for Piet<'w, 's> {
                     // We have two sizes now in layout?
                     size: Vec2::new(layout.size.width as f32, layout.size.height as f32),
                 },
-                text: *layout.render_text,
+                // Clone out of the Arc.
+                text: (*layout.render_text).clone(),
                 transform,
                 ..Default::default()
             })
+            // Manual insert of glyphs. Clone out of the Arc. This
+            // means we'll always have an extra copy of this along w/
+            // the struct in the TextLayout if it's not
+            // dropped. Unless we store a reference w/ the entity?
+            .insert((*layout.text_layout_info).clone())
             .maybe_insert(self.state.clip);
     }
 
@@ -463,8 +460,7 @@ pub struct PietText<'w, 's> {
     pub windows: Arc<Res<'w, Windows>>,
     pub texture_atlases: Arc<RefCell<ResMut<'w, Assets<TextureAtlas>>>>,
     pub font_atlas_set_storage: Arc<RefCell<ResMut<'w, Assets<FontAtlasSet>>>>,
-    pub text_pipeline: Arc<RefCell<ResMut<'w, DefaultTextPipeline>>>,
-    pub reserved_entity: Arc<Res<'w, ReservedEntity>>,
+    pub text_pipeline: Arc<RefCell<ResMut<'w, TextPipeline>>>,
 }
 
 impl<'w, 's> PietText<'w, 's> {
@@ -480,7 +476,6 @@ impl<'w, 's> PietText<'w, 's> {
             texture_atlases,
             font_atlas_set_storage,
             text_pipeline,
-            reserved_entity,
             ..
         } = params;
 
@@ -493,7 +488,6 @@ impl<'w, 's> PietText<'w, 's> {
             texture_atlases: Arc::new(texture_atlases.into()),
             font_atlas_set_storage: Arc::new(font_atlas_set_storage.into()),
             text_pipeline: Arc::new(text_pipeline.into()),
-            reserved_entity: reserved_entity.into(),
         }
     }
 }
@@ -751,10 +745,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
             ..Default::default()
         };
 
-        let id = self.params.reserved_entity.0;
-
         match text_pipeline.queue_text(
-            id,
             &self.params.fonts,
             &text.sections,
             scale_factor,
@@ -764,11 +755,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
             &mut texture_atlases,
             &mut textures,
         ) {
-            Ok(()) => {
-                let text_layout_info = text_pipeline
-                    .get_glyphs(&entity)
-                    .expect("Failed to get glyphs from the pipeline that have just been computed");
-
+            Ok(text_layout_info) => {
                 // Font metrics will be in pixel values, but we want
                 // dp for Piet.
                 let inv_scale = (1.0 / scale_factor) as f32;
@@ -861,11 +848,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                     .reduce(|r, gr| r.union(gr))
                     .unwrap_or_default();
 
-                // No Clone impl...
-                let text_layout_info = Arc::new(TextLayoutInfo {
-                    glyphs: text_layout_info.glyphs.clone(),
-                    size: text_layout_info.size,
-                });
+                let text_layout_info = Arc::new(text_layout_info);
 
                 Ok(PietTextLayout {
                     text: self.text.clone(),
@@ -961,12 +944,10 @@ pub struct PietPlugin;
 
 impl Plugin for PietPlugin {
     fn build(&self, app: &mut App) {
-        let reserved_entity = ReservedEntity(app.world.spawn().id());
         app.add_plugin(CameraTypePlugin::<CameraUi>::default())
             .register_type::<Node>()
             .register_type::<UiColor>()
-            .register_type::<UiImage>()
-            .insert_resource(reserved_entity);
+            .register_type::<UiImage>();
         // render systems
         bevy::ui::build_ui_render(app);
     }

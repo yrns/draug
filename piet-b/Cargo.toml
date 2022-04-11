@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { path = "../../clone/bevy", default-features = false, features = ["render", "bevy_winit", "x11", "png"], version = "0.6.0" }
+bevy = { path = "../../clone/bevy", default-features = false, features = ["render", "bevy_winit", "x11", "png"], version = "0.7.0-dev" }
 glyph_brush_layout = "0.2.3"
 piet = "0.5.0"
