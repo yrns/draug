@@ -1,5 +1,7 @@
 use bevy::asset::LoadState;
 use bevy::ecs::system::Resource;
+use bevy::input::mouse::MouseButtonInput;
+use bevy::input::ElementState;
 use bevy::input::{mouse::MouseButton, Input};
 use bevy::prelude::{
     warn, App, AssetServer, Commands, DefaultPlugins, EventReader, Font, Handle, Local, NonSend,
@@ -23,7 +25,10 @@ trait Root {
 impl Root for SomeData {
     fn root() -> Box<dyn Widget<Self>> {
         let label = Label::new("Hello, druid."); //.align_vertical(UnitPoint::TOP_LEFT);
-        let button = Button::new("Quit");
+        let button = Button::new("Quit").on_click(|_ctx, _data, _env| {
+            dbg!("got click");
+            //ctx.submit_command(CLOSE_WINDOW);
+        });
         let column = Flex::column().with_child(label).with_child(button);
         Box::new(column) as Box<dyn Widget<Self>>
     }
@@ -100,15 +105,24 @@ fn check_fonts(
     }
 }
 
+// Going from winit -> Bevy -> Druid...
+fn druid_mouse_button(b: &MouseButton) -> druid::MouseButton {
+    match b {
+        MouseButton::Left => druid::MouseButton::Left,
+        MouseButton::Right => druid::MouseButton::Right,
+        MouseButton::Middle => druid::MouseButton::Middle,
+        MouseButton::Other(b) => {
+            warn!("unhandled mouse button: {}", b);
+            druid::MouseButton::None
+        }
+    }
+}
+
 fn druid_mouse_buttons(input: &Input<MouseButton>) -> druid::MouseButtons {
+    // FromIterator?
     let mut set = druid::MouseButtons::new();
     for p in input.get_pressed() {
-        match p {
-            MouseButton::Left => set.insert(druid::MouseButton::Left),
-            MouseButton::Right => set.insert(druid::MouseButton::Right),
-            MouseButton::Middle => set.insert(druid::MouseButton::Middle),
-            MouseButton::Other(b) => warn!("unhandled mouse button: {}", b),
-        }
+        set.insert(druid_mouse_button(p));
     }
     set
 }
@@ -116,6 +130,7 @@ fn druid_mouse_buttons(input: &Input<MouseButton>) -> druid::MouseButtons {
 /// Synchronize windows via events.
 fn druid_window_system<T: Data + Resource + Root>(
     mut focused: Local<Option<bevy::window::WindowId>>,
+    mut cursor_position: Local<kurbo::Point>,
     mut data: ResMut<T>,
     env: NonSend<Env>,
     mut windows: NonSendMut<DruidWindows<T>>,
@@ -131,6 +146,7 @@ fn druid_window_system<T: Data + Resource + Root>(
     //mut cursor_entered: EventReader<CursorEntered>,
     mut cursor_left: EventReader<CursorLeft>,
     mouse_input: Res<Input<MouseButton>>,
+    mut mouse_button_input: EventReader<MouseButtonInput>,
     piet_params: druid::piet::PietParams,
 ) {
     // construct text only?
@@ -204,13 +220,14 @@ fn druid_window_system<T: Data + Resource + Root>(
                 // CursorMoved is in dp.
                 window.size().height - e.position.y as f64,
             );
+            *cursor_position = pos;
             window.event(
                 piet.text(),
                 &mut command_queue,
                 Event::MouseMove(druid::MouseEvent {
                     pos,
                     // Window remaps this?
-                    window_pos: pos,
+                    window_pos: kurbo::Point::ZERO,
                     buttons: druid_mouse_buttons(&*mouse_input),
                     mods: Modifiers::empty(), // TODO:
                     count: 0,
@@ -221,6 +238,27 @@ fn druid_window_system<T: Data + Resource + Root>(
                 &mut *data,
                 &*env,
             );
+        }
+    }
+
+    if let Some(window) = focused.and_then(|id| windows.get_mut(&id)) {
+        for e in mouse_button_input.iter() {
+            let MouseButtonInput { button, state } = e;
+            let druid_event = druid::MouseEvent {
+                pos: *cursor_position,
+                window_pos: kurbo::Point::ZERO,
+                buttons: druid_mouse_buttons(&*mouse_input),
+                mods: Modifiers::empty(), // TODO:
+                count: 0,
+                focus: false,
+                button: druid_mouse_button(button),
+                wheel_delta: Vec2::ZERO,
+            };
+            let event = match state {
+                ElementState::Pressed => Event::MouseDown(druid_event),
+                ElementState::Released => Event::MouseUp(druid_event),
+            };
+            window.event(piet.text(), &mut command_queue, event, &mut *data, &*env);
         }
     }
 }
