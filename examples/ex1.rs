@@ -1,8 +1,9 @@
 use bevy::asset::LoadState;
 use bevy::ecs::system::Resource;
+use bevy::input::{mouse::MouseButton, Input};
 use bevy::prelude::{
-    App, AssetServer, Commands, DefaultPlugins, EventReader, Font, Handle, NonSend, NonSendMut,
-    Res, ResMut, State, SystemSet, UiCameraBundle, Windows,
+    warn, App, AssetServer, Commands, DefaultPlugins, EventReader, Font, Handle, Local, NonSend,
+    NonSendMut, Res, ResMut, State, SystemSet, UiCameraBundle, Windows,
 };
 use bevy::utils::HashMap;
 use bevy::window::*;
@@ -99,8 +100,22 @@ fn check_fonts(
     }
 }
 
+fn druid_mouse_buttons(input: &Input<MouseButton>) -> druid::MouseButtons {
+    let mut set = druid::MouseButtons::new();
+    for p in input.get_pressed() {
+        match p {
+            MouseButton::Left => set.insert(druid::MouseButton::Left),
+            MouseButton::Right => set.insert(druid::MouseButton::Right),
+            MouseButton::Middle => set.insert(druid::MouseButton::Middle),
+            MouseButton::Other(b) => warn!("unhandled mouse button: {}", b),
+        }
+    }
+    set
+}
+
 /// Synchronize windows via events.
 fn druid_window_system<T: Data + Resource + Root>(
+    mut focused: Local<Option<bevy::window::WindowId>>,
     mut data: ResMut<T>,
     env: NonSend<Env>,
     mut windows: NonSendMut<DruidWindows<T>>,
@@ -110,12 +125,12 @@ fn druid_window_system<T: Data + Resource + Root>(
     mut _window_close_req: EventReader<WindowCloseRequested>,
     // `WinHandler::got_focus` is only used for AppState things and
     // `lost_focus` is not used at all?
-    //mut window_focused: EventReader<WindowFocused>,
+    mut window_focused: EventReader<WindowFocused>,
     mut cursor_moved: EventReader<CursorMoved>,
     // There is no `WinHandler::mouse_enter`?
     //mut cursor_entered: EventReader<CursorEntered>,
     mut cursor_left: EventReader<CursorLeft>,
-
+    mouse_input: Res<Input<MouseButton>>,
     piet_params: druid::piet::PietParams,
 ) {
     // construct text only?
@@ -155,6 +170,21 @@ fn druid_window_system<T: Data + Resource + Root>(
         }
     }
 
+    // Track focused window so we know where to send events. Maybe
+    // this is already tracked somewhere in Bevy...
+    for w in window_focused.iter() {
+        match (*focused, w) {
+            // Set new focus.
+            (_, WindowFocused { id, focused: true }) => {
+                *focused = Some(*id);
+                break;
+            }
+            // Unset focus.
+            (Some(cur), WindowFocused { id, focused: false }) if cur == *id => *focused = None,
+            _ => (),
+        }
+    }
+
     for e in cursor_left.iter() {
         if let Some(window) = windows.get_mut(&e.id) {
             window.event(
@@ -177,15 +207,15 @@ fn druid_window_system<T: Data + Resource + Root>(
             window.event(
                 piet.text(),
                 &mut command_queue,
-                Event::MouseMove(MouseEvent {
+                Event::MouseMove(druid::MouseEvent {
                     pos,
                     // Window remaps this?
                     window_pos: pos,
-                    buttons: MouseButtons::new(), // TODO:
-                    mods: Modifiers::empty(),     // TODO:
+                    buttons: druid_mouse_buttons(&*mouse_input),
+                    mods: Modifiers::empty(), // TODO:
                     count: 0,
                     focus: false,
-                    button: MouseButton::None,
+                    button: druid::MouseButton::None,
                     wheel_delta: Vec2::ZERO,
                 }),
                 &mut *data,
