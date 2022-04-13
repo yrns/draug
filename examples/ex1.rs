@@ -1,6 +1,6 @@
 use bevy::asset::LoadState;
 use bevy::ecs::system::Resource;
-use bevy::input::mouse::MouseButtonInput;
+use bevy::input::mouse::{MouseButtonInput, MouseScrollUnit, MouseWheel};
 use bevy::input::ElementState;
 use bevy::input::{mouse::MouseButton, Input};
 use bevy::prelude::{
@@ -127,10 +127,16 @@ fn druid_mouse_buttons(input: &Input<MouseButton>) -> druid::MouseButtons {
     set
 }
 
+// TODO: Most functionality from WinHandler should be covered
+// here. Also we need to pull stuff from WindowHandle.
+
+// TODO: Handle mouse grab: https://bevy-cheatbook.github.io/window/mouse-grab.html
+
 /// Synchronize windows via events.
 fn druid_window_system<T: Data + Resource + Root>(
     mut focused: Local<Option<bevy::window::WindowId>>,
     mut cursor_position: Local<kurbo::Point>,
+    piet_params: druid::piet::PietParams,
     mut data: ResMut<T>,
     env: NonSend<Env>,
     mut windows: NonSendMut<DruidWindows<T>>,
@@ -147,7 +153,7 @@ fn druid_window_system<T: Data + Resource + Root>(
     mut cursor_left: EventReader<CursorLeft>,
     mouse_input: Res<Input<MouseButton>>,
     mut mouse_button_input: EventReader<MouseButtonInput>,
-    piet_params: druid::piet::PietParams,
+    mut mouse_wheel: EventReader<MouseWheel>,
 ) {
     // construct text only?
     let mut piet = druid::piet::Piet::new(piet_params, 0.0);
@@ -213,6 +219,19 @@ fn druid_window_system<T: Data + Resource + Root>(
         }
     }
 
+    let druid_mouse_event = |pos| -> druid::MouseEvent {
+        druid::MouseEvent {
+            pos,
+            window_pos: kurbo::Point::ZERO,
+            buttons: druid_mouse_buttons(&*mouse_input),
+            mods: Modifiers::empty(), // TODO:
+            count: 0,
+            focus: false,
+            button: druid::MouseButton::None,
+            wheel_delta: Vec2::ZERO,
+        }
+    };
+
     for e in cursor_moved.iter() {
         if let Some(window) = windows.get_mut(&e.id) {
             let pos = Point::new(
@@ -224,41 +243,43 @@ fn druid_window_system<T: Data + Resource + Root>(
             window.event(
                 piet.text(),
                 &mut command_queue,
-                Event::MouseMove(druid::MouseEvent {
-                    pos,
-                    // Window remaps this?
-                    window_pos: kurbo::Point::ZERO,
-                    buttons: druid_mouse_buttons(&*mouse_input),
-                    mods: Modifiers::empty(), // TODO:
-                    count: 0,
-                    focus: false,
-                    button: druid::MouseButton::None,
-                    wheel_delta: Vec2::ZERO,
-                }),
+                Event::MouseMove(druid_mouse_event(pos)),
                 &mut *data,
                 &*env,
             );
         }
     }
 
+    // Bevy input handling isn't per-window, so we check the local
+    // `focused` handle.
     if let Some(window) = focused.and_then(|id| windows.get_mut(&id)) {
+        // mouse_down/mouse_up
         for e in mouse_button_input.iter() {
             let MouseButtonInput { button, state } = e;
-            let druid_event = druid::MouseEvent {
-                pos: *cursor_position,
-                window_pos: kurbo::Point::ZERO,
-                buttons: druid_mouse_buttons(&*mouse_input),
-                mods: Modifiers::empty(), // TODO:
-                count: 0,
-                focus: false,
-                button: druid_mouse_button(button),
-                wheel_delta: Vec2::ZERO,
-            };
+            let mut druid_event = druid_mouse_event(*cursor_position);
+            druid_event.button = druid_mouse_button(button);
             let event = match state {
                 ElementState::Pressed => Event::MouseDown(druid_event),
                 ElementState::Released => Event::MouseUp(druid_event),
             };
             window.event(piet.text(), &mut command_queue, event, &mut *data, &*env);
+        }
+
+        // wheel
+        for e in mouse_wheel.iter() {
+            let mut druid_event = druid_mouse_event(*cursor_position);
+            druid_event.wheel_delta = match e.unit {
+                MouseScrollUnit::Line => druid::Vec2::new(e.x as f64, e.y as f64),
+                // TODO: differently?
+                MouseScrollUnit::Pixel => druid::Vec2::new(e.x as f64, e.y as f64),
+            };
+            window.event(
+                piet.text(),
+                &mut command_queue,
+                Event::Wheel(druid_event),
+                &mut *data,
+                &*env,
+            );
         }
     }
 }
