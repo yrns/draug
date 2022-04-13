@@ -68,6 +68,26 @@ pub struct PietTextParams<'w, 's> {
     marker: std::marker::PhantomData<&'s usize>,
 }
 
+impl<'w, 's> PietParams<'w, 's> {
+    pub fn piet(self, height: f32) -> Piet<'w, 's> {
+        Piet::new(self, height)
+    }
+
+    pub fn text(self) -> PietText<'w, 's> {
+        let PietParams {
+            commands,
+            asset_server,
+            text_params,
+            ..
+        } = self;
+        PietText::new(
+            RefCell::new(commands).into(),
+            asset_server.into(),
+            text_params,
+        )
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct State {
     transform: Affine2,           //kurbo::Affine,

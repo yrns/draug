@@ -1,4 +1,5 @@
 use bevy::asset::LoadState;
+use bevy::core::Time;
 use bevy::ecs::system::Resource;
 use bevy::input::mouse::{MouseButtonInput, MouseScrollUnit, MouseWheel};
 use bevy::input::ElementState;
@@ -29,7 +30,7 @@ impl Root for SomeData {
             dbg!("got click");
             //ctx.submit_command(CLOSE_WINDOW);
         });
-        let column = Flex::column().with_child(label).with_child(button);
+        let column = Scroll::new(Flex::column().with_child(label).with_child(button)).vertical();
         Box::new(column) as Box<dyn Widget<Self>>
     }
 }
@@ -69,7 +70,9 @@ fn main() {
         .insert_resource(SomeData("druid".to_string()))
         .insert_non_send_resource(DruidWindows::<SomeData>::default())
         .insert_resource(DruidFonts::default())
+        // ordering?
         .add_system(druid_window_system::<SomeData>)
+        .add_system(druid_timer_system::<SomeData>)
         .add_system_set(SystemSet::on_enter(DruidState::Loading).with_system(setup))
         .add_system_set(SystemSet::on_update(DruidState::Loading).with_system(check_fonts))
         .add_system_set(
@@ -277,6 +280,51 @@ fn druid_window_system<T: Data + Resource + Root>(
                 piet.text(),
                 &mut command_queue,
                 Event::Wheel(druid_event),
+                &mut *data,
+                &*env,
+            );
+        }
+    }
+}
+
+fn druid_timer_system<T: Data + Resource + Root>(
+    mut data: ResMut<T>,
+    env: NonSend<Env>,
+    piet: druid::piet::PietParams,
+    time: Res<Time>,
+    mut windows: NonSendMut<DruidWindows<T>>,
+) {
+    let mut text = piet.text();
+
+    let mut command_queue = VecDeque::new();
+
+    let mut finished = Vec::new();
+
+    for window in windows.values_mut() {
+        // Move to WindowHandle?
+        {
+            let mut timers = window.handle.0.timers.borrow_mut();
+
+            // retain_mut is nightly, so we loop twice:
+            timers.iter_mut().for_each(|(_, t)| {
+                t.tick(time.delta());
+            });
+
+            timers.retain(|(token, timer)| {
+                if timer.finished() {
+                    finished.push(*token);
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+
+        for token in finished.iter() {
+            window.event(
+                &mut text,
+                &mut command_queue,
+                Event::Timer(*token),
                 &mut *data,
                 &*env,
             );
