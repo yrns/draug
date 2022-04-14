@@ -256,6 +256,11 @@ fn druid_window_system<T: Data + Resource + Root>(
 
     for e in cursor_moved.iter() {
         if let Some(window) = windows.get_mut(&e.id) {
+            // Mouse events prior to the initial layout aren't very
+            // useful (and just emit warnings).
+            if window.needs_layout() {
+                continue;
+            }
             let pos = Point::new(
                 e.position.x as f64,
                 // CursorMoved is in dp.
