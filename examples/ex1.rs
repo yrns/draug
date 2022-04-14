@@ -1,6 +1,7 @@
 use bevy::asset::LoadState;
 use bevy::core::Time;
-use bevy::ecs::system::Resource;
+use bevy::ecs::system::{Resource, SystemParam};
+use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::{MouseButtonInput, MouseScrollUnit, MouseWheel};
 use bevy::input::ElementState;
 use bevy::input::{mouse::MouseButton, Input};
@@ -10,6 +11,8 @@ use bevy::prelude::{
 };
 use bevy::utils::HashMap;
 use bevy::window::*;
+use draug::{druid_key_code, scan_to_code};
+use druid::keyboard_types::KeyState;
 use druid::widget::*;
 use druid::*;
 use std::collections::VecDeque;
@@ -135,6 +138,18 @@ fn druid_mouse_buttons(input: &Input<MouseButton>) -> druid::MouseButtons {
 
 // TODO: Handle mouse grab: https://bevy-cheatbook.github.io/window/mouse-grab.html
 
+#[derive(SystemParam)]
+struct InputParams<'w, 's> {
+    cursor_moved: EventReader<'w, 's, CursorMoved>,
+    // There is no `WinHandler::mouse_enter`?
+    //mut cursor_entered: EventReader<CursorEntered>,
+    cursor_left: EventReader<'w, 's, CursorLeft>,
+    mouse_input: Res<'w, Input<MouseButton>>,
+    mouse_button_input: EventReader<'w, 's, MouseButtonInput>,
+    mouse_wheel: EventReader<'w, 's, MouseWheel>,
+    key_input: EventReader<'w, 's, KeyboardInput>,
+}
+
 /// Synchronize windows via events.
 fn druid_window_system<T: Data + Resource + Root>(
     mut focused: Local<Option<bevy::window::WindowId>>,
@@ -150,13 +165,7 @@ fn druid_window_system<T: Data + Resource + Root>(
     // `WinHandler::got_focus` is only used for AppState things and
     // `lost_focus` is not used at all?
     mut window_focused: EventReader<WindowFocused>,
-    mut cursor_moved: EventReader<CursorMoved>,
-    // There is no `WinHandler::mouse_enter`?
-    //mut cursor_entered: EventReader<CursorEntered>,
-    mut cursor_left: EventReader<CursorLeft>,
-    mouse_input: Res<Input<MouseButton>>,
-    mut mouse_button_input: EventReader<MouseButtonInput>,
-    mut mouse_wheel: EventReader<MouseWheel>,
+    input: InputParams,
 ) {
     // construct text only?
     let mut piet = druid::piet::Piet::new(piet_params, 0.0);
@@ -209,6 +218,16 @@ fn druid_window_system<T: Data + Resource + Root>(
             _ => (),
         }
     }
+
+    // We went past the allowable number of parameters to a system function.
+    let InputParams {
+        mut cursor_moved,
+        mut cursor_left,
+        mouse_input,
+        mut mouse_button_input,
+        mut mouse_wheel,
+        mut key_input,
+    } = input;
 
     for e in cursor_left.iter() {
         if let Some(window) = windows.get_mut(&e.id) {
@@ -283,6 +302,33 @@ fn druid_window_system<T: Data + Resource + Root>(
                 &mut *data,
                 &*env,
             );
+        }
+
+        // WinHandler::zoom's only origin in Druid is on Mac with a
+        // pinch event. TODO: Bevy touch input?
+
+        // key_down/key_up
+        for e in key_input.iter() {
+            if let KeyboardInput {
+                scan_code,
+                key_code: Some(key_code),
+                state,
+            } = e
+            {
+                dbg!(key_code);
+                let mut druid_event = druid::KeyEvent::default();
+                druid_event.state = match state {
+                    ElementState::Pressed => KeyState::Down,
+                    ElementState::Released => KeyState::Up,
+                };
+                // druid_event.mods = ???
+
+                // u32 to druid::KbKey?
+                druid_event.code = scan_to_code(*scan_code);
+                druid_event.key = druid_key_code(key_code, false);
+
+                println!("{:?}", druid_event);
+            }
         }
     }
 }
