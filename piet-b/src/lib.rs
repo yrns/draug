@@ -1,13 +1,13 @@
 use bevy::{
     ecs::system::{EntityCommands, SystemParam},
-    math::{Affine2, Affine3A, Mat3A, Size, Vec2},
+    math::{Affine2, Affine3A, Mat3A, Vec2},
     prelude::{
-        App, AssetServer, Assets, Bundle, CameraUi, Commands, Component, Entity, GlobalTransform,
-        Handle, Image as BevyImage, Plugin, Query, Res, ResMut, TextureAtlas, Transform,
+        App, AssetServer, Assets, Bundle, Commands, Component, Entity, GlobalTransform, Handle,
+        Image as BevyImage, Plugin, Query, Res, ResMut, TextureAtlas, Transform, UiCameraConfig,
         Visibility,
     },
     render::{
-        camera::CameraTypePlugin,
+        extract_component::ExtractComponentPlugin,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
     },
     text::{
@@ -725,7 +725,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
     fn build(self) -> Result<Self::Out, piet::Error> {
         let scale_factor = self.params.scale_factor();
 
-        let node_size = Size::new(self.max_width as f32, f32::MAX);
+        let node_size = Vec2::new(self.max_width as f32, f32::MAX);
 
         let mut text_pipeline = self.params.text_pipeline.borrow_mut();
         let mut font_atlas_set_storage = self.params.font_atlas_set_storage.borrow_mut();
@@ -780,7 +780,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                 // dp for Piet.
                 let inv_scale = (1.0 / scale_factor) as f32;
                 let size = text_layout_info.size * inv_scale;
-                let size = kurbo::Size::new(size.width as f64, size.height as f64);
+                let size = kurbo::Size::new(size.x as f64, size.y as f64);
                 let glyphs: Vec<_> = text_layout_info
                     .glyphs
                     .iter()
@@ -805,7 +805,7 @@ impl piet::TextLayoutBuilder for PietTextLayoutBuilder<'_, '_> {
                             font, font_size, ..
                         } = &s.style;
                         // fonts are already checked above
-                        (self.params.fonts.get(font.id).unwrap(), font_size)
+                        (self.params.fonts.get(font).unwrap(), font_size)
                     })
                     //.unique() - probably dupes, but font_size isn't
                     // hashable; we need to maintain section indices
@@ -962,9 +962,10 @@ pub struct TextBundle {
 #[derive(Default)]
 pub struct PietPlugin;
 
+// This is pared down from UiPlugin.
 impl Plugin for PietPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(CameraTypePlugin::<CameraUi>::default())
+        app.add_plugin(ExtractComponentPlugin::<UiCameraConfig>::default())
             .register_type::<Node>()
             .register_type::<UiColor>()
             .register_type::<UiImage>();

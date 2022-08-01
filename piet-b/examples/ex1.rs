@@ -17,6 +17,7 @@ fn main() {
         })
         // This replaces UiPlugin; can't have both.
         .add_plugin(piet::PietPlugin::default())
+        // #5384
         .insert_resource(WinitSettings::desktop_app())
         .add_startup_system(setup)
         .add_system(draw)
@@ -24,7 +25,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn_bundle(UiCameraBundle::default());
+    commands.spawn_bundle(Camera2dBundle::default());
     commands.insert_resource(PietImage::from(asset_server.load("hatch.png")));
 }
 
