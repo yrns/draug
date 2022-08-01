@@ -2,9 +2,9 @@ use bevy::{
     ecs::system::{EntityCommands, SystemParam},
     math::{Affine2, Affine3A, Mat3A, Vec2},
     prelude::{
-        App, AssetServer, Assets, Bundle, Commands, Component, Entity, GlobalTransform, Handle,
-        Image as BevyImage, Plugin, Query, Res, ResMut, TextureAtlas, Transform, UiCameraConfig,
-        Visibility,
+        App, AssetServer, Assets, Bundle, Commands, Component, ComputedVisibility, Entity,
+        GlobalTransform, Handle, Image as BevyImage, Plugin, Query, Res, ResMut, TextureAtlas,
+        Transform, UiCameraConfig, Visibility,
     },
     render::{
         extract_component::ExtractComponentPlugin,
@@ -945,6 +945,7 @@ pub struct NodeBundle {
     pub transform: Transform,
     pub global_transform: GlobalTransform,
     pub visibility: Visibility,
+    pub computed_visibility: ComputedVisibility,
 }
 
 // is this needed? what about ImageMode and CalculatedSize?
@@ -957,6 +958,7 @@ pub struct TextBundle {
     pub transform: Transform,
     pub global_transform: GlobalTransform,
     pub visibility: Visibility,
+    pub computed_visibility: ComputedVisibility,
 }
 
 #[derive(Default)]
