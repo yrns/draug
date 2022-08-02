@@ -1,14 +1,14 @@
 use bevy::asset::LoadState;
-use bevy::core::Time;
 use bevy::ecs::system::{Resource, SystemParam};
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::{MouseButtonInput, MouseScrollUnit, MouseWheel};
-use bevy::input::ElementState;
+use bevy::input::ButtonState;
 use bevy::input::{mouse::MouseButton, Input};
 use bevy::prelude::{
-    warn, App, AssetServer, Commands, DefaultPlugins, EventReader, Font, Handle, Local, NonSend,
-    NonSendMut, Res, ResMut, State, SystemSet, UiCameraBundle, Windows,
+    warn, App, AssetServer, Camera2dBundle, Commands, DefaultPlugins, EventReader, Font, Handle,
+    Local, NonSend, NonSendMut, Res, ResMut, State, SystemSet, Windows,
 };
+use bevy::time::Time;
 use bevy::utils::HashMap;
 use bevy::window::*;
 use draug::{druid_key_code, scan_to_code};
@@ -89,7 +89,7 @@ fn setup(
     mut druid_fonts: ResMut<DruidFonts>,
     asset_server: Res<AssetServer>,
 ) {
-    commands.spawn_bundle(UiCameraBundle::default());
+    commands.spawn_bundle(Camera2dBundle::default());
 
     // Load all fonts or tie in w/ env?
     //druid_fonts.0 = asset_server.load_folder(".").unwrap();
@@ -286,8 +286,8 @@ fn druid_window_system<T: Data + Resource + Root>(
             let mut druid_event = druid_mouse_event(*cursor_position);
             druid_event.button = druid_mouse_button(button);
             let event = match state {
-                ElementState::Pressed => Event::MouseDown(druid_event),
-                ElementState::Released => Event::MouseUp(druid_event),
+                ButtonState::Pressed => Event::MouseDown(druid_event),
+                ButtonState::Released => Event::MouseUp(druid_event),
             };
             window.event(piet.text(), &mut command_queue, event, &mut *data, &*env);
         }
@@ -323,8 +323,8 @@ fn druid_window_system<T: Data + Resource + Root>(
                 dbg!(key_code);
                 let mut druid_event = druid::KeyEvent::default();
                 druid_event.state = match state {
-                    ElementState::Pressed => KeyState::Down,
-                    ElementState::Released => KeyState::Up,
+                    ButtonState::Pressed => KeyState::Down,
+                    ButtonState::Released => KeyState::Up,
                 };
                 // druid_event.mods = ???
 
